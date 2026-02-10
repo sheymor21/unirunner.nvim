@@ -102,4 +102,28 @@ function M.save_local_config(root, data)
   return true
 end
 
+local output_history = {}
+local max_history = 3
+
+function M.save_output(command, output, is_cancelled)
+  table.insert(output_history, 1, {
+    command = command,
+    output = output,
+    timestamp = os.date('%Y-%m-%d %H:%M:%S'),
+    is_cancelled = is_cancelled or false,
+  })
+  
+  while #output_history > max_history do
+    table.remove(output_history)
+  end
+end
+
+function M.get_output_history()
+  return output_history
+end
+
+function M.clear_output_history()
+  output_history = {}
+end
+
 return M

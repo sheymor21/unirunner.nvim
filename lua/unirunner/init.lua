@@ -70,7 +70,9 @@ local function execute_command(cmd)
   
   last_command = cmd
   persistence.save_last_command(current_root, cmd.name)
-  terminal.run(cmd.command, current_root)
+  terminal.run(cmd.command, current_root, function(output)
+    persistence.save_output(cmd.name, output)
+  end)
 end
 
 local function show_picker()
@@ -257,6 +259,137 @@ function M.is_active()
   
   local runner = select(2, runners.detect_runner(root))
   return runner ~= nil
+end
+
+function M.show_output_history()
+  local history = persistence.get_output_history()
+  
+  if #history == 0 then
+    vim.notify('UniRunner: No output history available', vim.log.levels.WARN)
+    return
+  end
+  
+  local options = {}
+  for i, entry in ipairs(history) do
+    local status = entry.is_cancelled and '[CANCELLED]' or '[COMPLETED]'
+    local display = string.format('%d. %s [%s] %s', i, status, entry.timestamp, entry.command)
+    table.insert(options, display)
+  end
+  
+  vim.ui.select(options, {
+    prompt = 'Select output to view:',
+  }, function(choice, idx)
+    if choice and idx then
+      local entry = history[idx]
+      local buf_name = 'UniRunner Output: ' .. entry.command
+      
+      -- Check if buffer with this name already exists
+      local existing_buf = vim.fn.bufnr(buf_name)
+      if existing_buf ~= -1 then
+        -- Buffer exists, use it
+        vim.cmd('split')
+        vim.api.nvim_win_set_buf(0, existing_buf)
+      else
+        -- Create a new buffer
+        local buf = vim.api.nvim_create_buf(false, true)
+        vim.api.nvim_buf_set_lines(buf, 0, -1, false, vim.split(entry.output, '\n'))
+        vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+        vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
+        vim.api.nvim_buf_set_name(buf, buf_name)
+        
+        -- Open in a new window
+        vim.cmd('split')
+        vim.api.nvim_win_set_buf(0, buf)
+      end
+    end
+  end)
+end
+
+function M.clear_output_history()
+  persistence.clear_output_history()
+  vim.notify('UniRunner: Output history cleared', vim.log.levels.INFO)
+end
+
+function M.cancel()
+  local windows = vim.api.nvim_list_wins()
+  local terminals = {}
+
+  for _, win in ipairs(windows) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    local buftype = vim.api.nvim_buf_get_option(buf, 'buftype')
+
+    if buftype == 'terminal' then
+      table.insert(terminals, win)
+    end
+  end
+
+  local function close_terminal(win)
+    local buf = vim.api.nvim_win_get_buf(win)
+    -- Save output before closing
+    local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+    local output = table.concat(lines, '\n')
+    if last_command then
+      persistence.save_output(last_command.name, output, true)
+    end
+    
+    local chan = vim.api.nvim_buf_get_var(buf, 'terminal_job_id')
+    if chan then
+      vim.api.nvim_chan_send(chan, '\x03')
+    end
+    vim.defer_fn(function()
+      if vim.api.nvim_win_is_valid(win) then
+        vim.api.nvim_win_close(win, true)
+      end
+    end, 100)
+  end
+
+  if #terminals == 0 then
+    vim.notify('UniRunner: No running terminals found', vim.log.levels.WARN)
+    return
+  elseif #terminals == 1 then
+    close_terminal(terminals[1])
+    vim.notify('UniRunner: Cancelled and closed terminal', vim.log.levels.INFO)
+  else
+    -- Use nvim-window-picker if available
+    local ok, picker = pcall(require, 'window-picker')
+    if ok then
+      local picked_window = picker.pick_window({
+        filter_rules = {
+          include_current_win = true,
+          autoselect_one = true,
+          bo = {
+            filetype = {},
+            buftype = { 'terminal' },
+          },
+        },
+      })
+      if picked_window then
+        close_terminal(picked_window)
+        vim.notify('UniRunner: Cancelled and closed terminal', vim.log.levels.INFO)
+      end
+    else
+      -- Fallback to vim.ui.select
+      local options = {}
+      for i, win in ipairs(terminals) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        local name = vim.api.nvim_buf_get_name(buf)
+        local display_name = vim.fn.fnamemodify(name, ':t')
+        if display_name == '' then
+          display_name = 'Terminal ' .. i
+        end
+        table.insert(options, display_name)
+      end
+
+      vim.ui.select(options, {
+        prompt = 'Select terminal to cancel:',
+      }, function(choice, idx)
+        if choice and idx then
+          close_terminal(terminals[idx])
+          vim.notify('UniRunner: Cancelled and closed terminal', vim.log.levels.INFO)
+        end
+      end)
+    end
+  end
 end
 
 return M
