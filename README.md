@@ -4,13 +4,17 @@ A universal project runner plugin for Neovim with automatic project detection, c
 
 ## Features
 
-- **Automatic project detection** - Finds project root using configurable markers
+- **Automatic project detection** - Finds project root using configurable markers (package.json, go.mod, *.sln, .git)
+- **Multi-language support** - JavaScript/TypeScript, Go, C#, Lua out of the box
 - **Package manager detection** - Automatically detects npm, yarn, pnpm, or bun
 - **Command persistence** - Remembers and re-runs your last command
 - **Custom commands** - Create project-specific custom run commands
+- **Output history** - View last 3 command outputs with ANSI codes stripped
+- **Terminal management** - Jump to terminals, cancel running processes
 - **Easy extensibility** - Simple API to add support for new languages
 - **vim.ui.select integration** - Native Neovim UI, no external dependencies
 - **Toggleterm support** - Optional integration with toggleterm.nvim
+- **Window picker support** - Works with nvim-window-picker for terminal selection
 
 ## Installation
 
@@ -22,6 +26,8 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
   dependencies = {
     -- Optional: for better terminal experience
     'akinsho/toggleterm.nvim',
+    -- Optional: for window picking
+    's1n7ax/nvim-window-picker',
   },
   config = function()
     require('unirunner').setup()
@@ -50,14 +56,19 @@ use {
 | `:UniRunnerSelect` | Always show command picker |
 | `:UniRunnerLast` | Re-run the last executed command |
 | `:UniRunnerConfig` | Open project configuration file |
+| `:UniRunnerTerminal` | Jump to terminal window (uses window-picker if available) |
+| `:UniRunnerCancel` | Cancel running terminal process |
+| `:UniRunnerHistory` | Show last 3 command outputs |
+| `:UniRunnerClearHistory` | Clear output history |
 
 ### Workflow
 
-1. Navigate to a JavaScript/TypeScript project
+1. Navigate to a supported project (JS/TS, Go, C#, Lua)
 2. Run `:UniRunner` or `:UniRunnerSelect`
-3. Select a command from package.json scripts or create a custom one
+3. Select a command from detected scripts or create a custom one
 4. The command runs in a terminal (toggleterm or native)
 5. Next time, `:UniRunner` will re-run the same command immediately
+6. Use `:UniRunnerHistory` to view previous outputs
 
 ### Custom Commands
 
@@ -69,8 +80,7 @@ Create project-specific commands by running `:UniRunnerConfig` or manually creat
     "test:watch": "npm run test -- --watch",
     "lint:fix": "eslint . --fix",
     "deploy": "vercel --prod"
-  },
-  "default_command": "dev"
+  }
 }
 ```
 
@@ -90,6 +100,8 @@ require('unirunner').setup({
   -- Markers to find project root (in order of priority)
   root_markers = {
     'package.json',
+    'go.mod',
+    '*.sln',
     '.git',
   },
 })
@@ -104,9 +116,33 @@ vim.keymap.set('n', '<leader>rr', '<cmd>UniRunner<cr>', { desc = 'Run project co
 vim.keymap.set('n', '<leader>rs', '<cmd>UniRunnerSelect<cr>', { desc = 'Select project command' })
 vim.keymap.set('n', '<leader>rl', '<cmd>UniRunnerLast<cr>', { desc = 'Run last project command' })
 vim.keymap.set('n', '<leader>rc', '<cmd>UniRunnerConfig<cr>', { desc = 'Edit project config' })
+vim.keymap.set('n', '<leader>rt', '<cmd>UniRunnerTerminal<cr>', { desc = 'Go to terminal' })
+vim.keymap.set('n', '<leader>rC', '<cmd>UniRunnerCancel<cr>', { desc = 'Cancel runner' })
+vim.keymap.set('n', '<leader>rh', '<cmd>UniRunnerHistory<cr>', { desc = 'Show output history' })
 ```
 
-## Package Manager Detection
+## Supported Languages
+
+### JavaScript/TypeScript
+- Detects: `package.json`
+- Package managers: npm, yarn, pnpm, bun (auto-detected via lock files)
+- Commands: All scripts from package.json
+
+### Go
+- Detects: `go.mod`, `main.go`, or any `.go` files
+- Commands: `run`, `build`, `test`, `test:v`, `fmt`, `vet`, `mod tidy`, `mod download`
+- Makefile commands if present
+
+### C# / .NET
+- Detects: `*.sln`, `*.csproj`, `*.fsproj`
+- Commands: From `launchSettings.json` profiles (e.g., `ProjectName:http`, `ProjectName:https`)
+- Solution commands: `build`, `restore`, `test`, `clean`, `pack`
+
+### Lua
+- Detects: `.luarocks/`, `*.rockspec`, `main.lua`, `init.lua`
+- Commands: `run`, `build`, `test`, `install`
+
+## Package Manager Detection (JavaScript)
 
 The plugin detects package managers by checking for lock files in this priority:
 
@@ -115,6 +151,30 @@ The plugin detects package managers by checking for lock files in this priority:
 3. `yarn.lock` → yarn
 4. `package-lock.json` → npm
 5. None → npm (fallback)
+
+## Output History
+
+The plugin automatically saves the last 3 command outputs:
+- ANSI escape codes are stripped for clean viewing
+- Distinguishes between completed and cancelled runs
+- Access via `:UniRunnerHistory`
+
+## API
+
+```lua
+local unirunner = require('unirunner')
+
+-- Check if a runner is active for current project
+if unirunner.is_active() then
+  print("Project detected!")
+end
+
+-- Run commands programmatically
+unirunner.run()           -- Smart run (last or picker)
+unirunner.run_select()    -- Force picker
+unirunner.run_last()      -- Repeat last
+unirunner.cancel()        -- Cancel current terminal
+```
 
 ## Extending with New Languages
 
@@ -164,11 +224,13 @@ runners.register('python', python)
 
 - **Global persistence**: `~/.local/share/nvim/unirunner/projects.json`
 - **Per-project config**: `.unirunner.json` in project root
+- **Output history**: In-memory only (last 3 runs)
 
 ## Requirements
 
 - Neovim >= 0.7.0
 - [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) (optional, for better terminal experience)
+- [nvim-window-picker](https://github.com/s1n7ax/nvim-window-picker) (optional, for window selection)
 
 ## License
 
