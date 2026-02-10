@@ -248,6 +248,9 @@ function M.cancel()
     return
   end
   
+  local cfg = config.get()
+  local cancel_delay = cfg.cancel_close_delay
+  
   local function close_terminal(win)
     local buf = vim.api.nvim_win_get_buf(win)
     if last_command then
@@ -261,11 +264,14 @@ function M.cancel()
     if ok and chan then
       vim.api.nvim_chan_send(chan, '\x03')
     end
-    vim.defer_fn(function()
-      if vim.api.nvim_win_is_valid(win) then
-        vim.api.nvim_win_close(win, true)
-      end
-    end, 100)
+    
+    if cancel_delay > 0 then
+      vim.defer_fn(function()
+        if vim.api.nvim_win_is_valid(win) then
+          vim.api.nvim_win_close(win, true)
+        end
+      end, cancel_delay)
+    end
   end
   
   if #terminals == 1 then

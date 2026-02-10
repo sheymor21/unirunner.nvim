@@ -10,6 +10,10 @@ local defaults = {
     '*.sln',
     '.git',
   },
+  -- Delay in milliseconds before closing terminal after process finishes (0 to disable)
+  close_delay = 2000,
+  -- Delay in milliseconds before closing terminal after cancel (0 to disable)
+  cancel_close_delay = 100,
 }
 
 M.options = nil

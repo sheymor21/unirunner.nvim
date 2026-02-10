@@ -3,21 +3,22 @@ local M = {}
 local config = require('unirunner.config')
 local detector = require('unirunner.detector')
 
-function M.run(command, root, on_output)
+function M.run(command, root, on_output, is_cancel)
   local cfg = config.get()
   local cwd = detector.get_working_dir(root)
+  local delay = is_cancel and cfg.cancel_close_delay or cfg.close_delay
   
   if cfg.terminal == 'toggleterm' then
-    M.run_toggleterm(command, cwd, on_output)
+    M.run_toggleterm(command, cwd, on_output, delay)
   else
-    M.run_native(command, cwd, on_output)
+    M.run_native(command, cwd, on_output, delay)
   end
 end
 
-function M.run_toggleterm(command, cwd, on_output)
+function M.run_toggleterm(command, cwd, on_output, delay)
   local ok, toggleterm = pcall(require, 'toggleterm.terminal')
   if not ok then
-    M.run_native(command, cwd, on_output)
+    M.run_native(command, cwd, on_output, delay)
     return
   end
   
@@ -43,10 +44,12 @@ function M.run_toggleterm(command, cwd, on_output)
       if on_output then
         on_output(table.concat(output_lines, '\n'))
       end
-      -- Close terminal after 2 second delay
-      vim.defer_fn(function()
-        t:close()
-      end, 2000)
+      -- Close terminal after configured delay
+      if delay > 0 then
+        vim.defer_fn(function()
+          t:close()
+        end, delay)
+      end
     end,
   })
   
@@ -54,7 +57,7 @@ function M.run_toggleterm(command, cwd, on_output)
   vim.defer_fn(function() vim.cmd('wincmd p') end, 100)
 end
 
-function M.run_native(command, cwd, on_output)
+function M.run_native(command, cwd, on_output, delay)
   local current_win = vim.api.nvim_get_current_win()
   
   vim.cmd('split')
@@ -79,15 +82,17 @@ function M.run_native(command, cwd, on_output)
             on_output(table.concat(lines, '\n'))
           end
         end
-        -- Close the terminal window after 2 second delay
-        vim.defer_fn(function()
-          for _, win in ipairs(vim.api.nvim_list_wins()) do
-            if vim.api.nvim_win_get_buf(win) == buf then
-              pcall(vim.api.nvim_win_close, win, true)
-              break
+        -- Close the terminal window after configured delay
+        if delay > 0 then
+          vim.defer_fn(function()
+            for _, win in ipairs(vim.api.nvim_list_wins()) do
+              if vim.api.nvim_win_get_buf(win) == buf then
+                pcall(vim.api.nvim_win_close, win, true)
+                break
+              end
             end
-          end
-        end, 2000)
+          end, delay)
+        end
       end, 100)
     end,
   })
