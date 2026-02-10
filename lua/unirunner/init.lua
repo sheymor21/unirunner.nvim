@@ -70,7 +70,9 @@ local function execute_command(cmd)
   
   last_command = cmd
   persistence.save_last_command(current_root, cmd.name)
+  vim.notify('UniRunner: Starting command: ' .. cmd.name, vim.log.levels.INFO)
   terminal.run(cmd.command, current_root, function(output)
+    vim.notify('UniRunner: Command finished, saving output (' .. #output .. ' chars)', vim.log.levels.INFO)
     persistence.save_output(cmd.name, output)
   end)
 end
@@ -212,15 +214,23 @@ function M.goto_terminal()
     -- Use nvim-window-picker if available
     local ok, picker = pcall(require, 'window-picker')
     if ok then
+      -- Build window filter that only includes our terminal windows
+      local terminal_win_ids = {}
+      for _, win in ipairs(terminals) do
+        table.insert(terminal_win_ids, win)
+      end
+      
       local picked_window = picker.pick_window({
-        filter_rules = {
-          include_current_win = true,
-          autoselect_one = true,
-          bo = {
-            filetype = {},
-            buftype = { 'terminal' },
-          },
-        },
+        autoselect_one = false,
+        filter_func = function(win_id, buf_id)
+          -- Only allow picking from our terminal windows
+          for _, term_win in ipairs(terminal_win_ids) do
+            if term_win == win_id then
+              return true
+            end
+          end
+          return false
+        end,
       })
       if picked_window then
         vim.api.nvim_set_current_win(picked_window)
@@ -353,15 +363,23 @@ function M.cancel()
     -- Use nvim-window-picker if available
     local ok, picker = pcall(require, 'window-picker')
     if ok then
+      -- Build window filter that only includes our terminal windows
+      local terminal_win_ids = {}
+      for _, win in ipairs(terminals) do
+        table.insert(terminal_win_ids, win)
+      end
+      
       local picked_window = picker.pick_window({
-        filter_rules = {
-          include_current_win = true,
-          autoselect_one = true,
-          bo = {
-            filetype = {},
-            buftype = { 'terminal' },
-          },
-        },
+        autoselect_one = false,
+        filter_func = function(win_id, buf_id)
+          -- Only allow picking from our terminal windows
+          for _, term_win in ipairs(terminal_win_ids) do
+            if term_win == win_id then
+              return true
+            end
+          end
+          return false
+        end,
       })
       if picked_window then
         close_terminal(picked_window)

@@ -48,9 +48,12 @@ function M.run_toggleterm(command, cwd, on_output)
         end
       end
     end,
-    on_close = function(term)
+    on_exit = function(term, job, exit_code, name)
+      vim.notify('UniRunner: Toggleterm on_exit triggered with code ' .. tostring(exit_code), vim.log.levels.INFO)
       if on_output then
-        on_output(table.concat(output_lines, '\n'))
+        local output = table.concat(output_lines, '\n')
+        vim.notify('UniRunner: Toggleterm saving output (' .. #output .. ' chars)', vim.log.levels.INFO)
+        on_output(output)
       end
     end,
   })
@@ -71,17 +74,9 @@ function M.run_native(command, cwd, on_output)
   vim.cmd('terminal ' .. command)
   
   local buf = vim.api.nvim_get_current_buf()
-  local output_lines = {}
+  local job_id = vim.b[buf].terminal_job_id
   
-  -- Capture output using buffer lines
-  vim.api.nvim_buf_attach(buf, false, {
-    on_lines = function(_, buf, _, first, last)
-      local lines = vim.api.nvim_buf_get_lines(buf, first, last, false)
-      for _, line in ipairs(lines) do
-        table.insert(output_lines, line)
-      end
-    end,
-  })
+  vim.notify('UniRunner: Native terminal started with job_id: ' .. tostring(job_id), vim.log.levels.INFO)
   
   if cwd then
     vim.cmd('lcd ' .. cwd)
@@ -90,12 +85,21 @@ function M.run_native(command, cwd, on_output)
   -- Return focus to original window
   vim.api.nvim_set_current_win(current_win)
   
-  -- Save output when buffer is closed
-  vim.api.nvim_create_autocmd('BufDelete', {
+  -- Set up autocmd to capture output when terminal process ends
+  vim.api.nvim_create_autocmd('TermClose', {
     buffer = buf,
+    once = true,
     callback = function()
+      vim.notify('UniRunner: TermClose triggered', vim.log.levels.INFO)
       if on_output then
-        on_output(table.concat(output_lines, '\n'))
+        vim.defer_fn(function()
+          local ok, lines = pcall(vim.api.nvim_buf_get_lines, buf, 0, -1, false)
+          if ok then
+            local output = table.concat(lines, '\n')
+            vim.notify('UniRunner: Captured ' .. #lines .. ' lines', vim.log.levels.INFO)
+            on_output(output)
+          end
+        end, 100)
       end
     end,
   })

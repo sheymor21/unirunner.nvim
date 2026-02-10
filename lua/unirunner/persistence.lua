@@ -105,10 +105,24 @@ end
 local output_history = {}
 local max_history = 3
 
+local function strip_ansi_codes(str)
+  -- Remove ANSI escape sequences using a comprehensive pattern
+  -- Match ESC followed by [ then various control sequences
+  local result = str
+  -- Remove all ANSI escape sequences: ESC[... followed by a letter
+  result = result:gsub("\27%[[0-9;]*[a-zA-Z]", "")
+  -- Remove cursor show/hide sequences
+  result = result:gsub("\27%[?25[hl]", "")
+  -- Remove any remaining ESC sequences
+  result = result:gsub("\27%[[^a-zA-Z]*[a-zA-Z]", "")
+  return result
+end
+
 function M.save_output(command, output, is_cancelled)
+  local clean_output = strip_ansi_codes(output)
   table.insert(output_history, 1, {
     command = command,
-    output = output,
+    output = clean_output,
     timestamp = os.date('%Y-%m-%d %H:%M:%S'),
     is_cancelled = is_cancelled or false,
   })
