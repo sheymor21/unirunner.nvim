@@ -22,7 +22,7 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 
 ```lua
 {
-  'yourusername/unirunner.nvim',
+  'sheymor21/unirunner.nvim',
   dependencies = {
     -- Optional: for better terminal experience
     'akinsho/toggleterm.nvim',
