@@ -249,4 +249,14 @@ function M.goto_terminal()
   end
 end
 
+function M.is_active()
+  local root = detector.find_root()
+  if not root then
+    return false
+  end
+  
+  local runner = select(2, runners.detect_runner(root))
+  return runner ~= nil
+end
+
 return M
