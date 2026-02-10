@@ -7,6 +7,7 @@ local defaults = {
   root_markers = {
     'package.json',
     'go.mod',
+    '*.sln',
     '.git',
   },
 }
