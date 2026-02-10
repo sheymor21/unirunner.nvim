@@ -16,6 +16,9 @@ runners.register('lua', lua_runner)
 local go_runner = require('unirunner.runners.go')
 runners.register('go', go_runner)
 
+local csharp_runner = require('unirunner.runners.csharp')
+runners.register('csharp', csharp_runner)
+
 local current_root = nil
 local last_command = nil
 
@@ -182,6 +185,68 @@ function M.open_config()
   end
   
   vim.cmd('edit ' .. config_file)
+end
+
+function M.goto_terminal()
+  local windows = vim.api.nvim_list_wins()
+  local terminals = {}
+
+  for _, win in ipairs(windows) do
+    local buf = vim.api.nvim_win_get_buf(win)
+    local buftype = vim.api.nvim_buf_get_option(buf, 'buftype')
+
+    if buftype == 'terminal' then
+      table.insert(terminals, win)
+    end
+  end
+
+  if #terminals == 0 then
+    vim.notify('UniRunner: No terminal windows found', vim.log.levels.WARN)
+    return
+  elseif #terminals == 1 then
+    vim.api.nvim_set_current_win(terminals[1])
+    vim.cmd('startinsert!')
+  else
+    -- Use nvim-window-picker if available
+    local ok, picker = pcall(require, 'window-picker')
+    if ok then
+      local picked_window = picker.pick_window({
+        filter_rules = {
+          include_current_win = true,
+          autoselect_one = true,
+          bo = {
+            filetype = {},
+            buftype = { 'terminal' },
+          },
+        },
+      })
+      if picked_window then
+        vim.api.nvim_set_current_win(picked_window)
+        vim.cmd('startinsert!')
+      end
+    else
+      -- Fallback to vim.ui.select
+      local options = {}
+      for i, win in ipairs(terminals) do
+        local buf = vim.api.nvim_win_get_buf(win)
+        local name = vim.api.nvim_buf_get_name(buf)
+        local display_name = vim.fn.fnamemodify(name, ':t')
+        if display_name == '' then
+          display_name = 'Terminal ' .. i
+        end
+        table.insert(options, display_name)
+      end
+
+      vim.ui.select(options, {
+        prompt = 'Select terminal:',
+      }, function(choice, idx)
+        if choice and idx then
+          vim.api.nvim_set_current_win(terminals[idx])
+          vim.cmd('startinsert!')
+        end
+      end)
+    end
+  end
 end
 
 return M

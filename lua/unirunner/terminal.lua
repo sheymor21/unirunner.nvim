@@ -31,14 +31,22 @@ function M.run_toggleterm(command, cwd)
     direction = 'horizontal',
     close_on_exit = false,
     on_open = function(term)
-      vim.cmd('startinsert!')
+      -- Don't force insert mode, keep cursor in original window
     end,
   })
   
   term:toggle()
+  
+  -- Return focus to the original window after a short delay
+  vim.defer_fn(function()
+    vim.cmd('wincmd p')
+  end, 100)
 end
 
 function M.run_native(command, cwd)
+  -- Save current window
+  local current_win = vim.api.nvim_get_current_win()
+  
   vim.cmd('split')
   vim.cmd('terminal ' .. command)
   
@@ -46,7 +54,8 @@ function M.run_native(command, cwd)
     vim.cmd('lcd ' .. cwd)
   end
   
-  vim.cmd('startinsert!')
+  -- Return focus to original window
+  vim.api.nvim_set_current_win(current_win)
 end
 
 return M
