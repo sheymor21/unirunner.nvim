@@ -28,7 +28,7 @@ function M.run_toggleterm(command, cwd, on_output)
     cmd = command,
     dir = cwd,
     direction = 'horizontal',
-    close_on_exit = false,
+    close_on_exit = true,
     on_stdout = function(_, _, data)
       if data then
         vim.list_extend(output_lines, data)
@@ -73,6 +73,13 @@ function M.run_native(command, cwd, on_output)
           local ok, lines = pcall(vim.api.nvim_buf_get_lines, buf, 0, -1, false)
           if ok then
             on_output(table.concat(lines, '\n'))
+          end
+        end
+        -- Close the terminal window after process finishes
+        for _, win in ipairs(vim.api.nvim_list_wins()) do
+          if vim.api.nvim_win_get_buf(win) == buf then
+            pcall(vim.api.nvim_win_close, win, true)
+            break
           end
         end
       end, 100)
