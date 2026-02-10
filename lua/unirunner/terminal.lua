@@ -28,7 +28,7 @@ function M.run_toggleterm(command, cwd, on_output)
     cmd = command,
     dir = cwd,
     direction = 'horizontal',
-    close_on_exit = true,
+    close_on_exit = false,
     on_stdout = function(_, _, data)
       if data then
         vim.list_extend(output_lines, data)
@@ -39,10 +39,14 @@ function M.run_toggleterm(command, cwd, on_output)
         vim.list_extend(output_lines, data)
       end
     end,
-    on_exit = function()
+    on_exit = function(t)
       if on_output then
         on_output(table.concat(output_lines, '\n'))
       end
+      -- Close terminal after 2 second delay
+      vim.defer_fn(function()
+        t:close()
+      end, 2000)
     end,
   })
   
@@ -75,13 +79,15 @@ function M.run_native(command, cwd, on_output)
             on_output(table.concat(lines, '\n'))
           end
         end
-        -- Close the terminal window after process finishes
-        for _, win in ipairs(vim.api.nvim_list_wins()) do
-          if vim.api.nvim_win_get_buf(win) == buf then
-            pcall(vim.api.nvim_win_close, win, true)
-            break
+        -- Close the terminal window after 2 second delay
+        vim.defer_fn(function()
+          for _, win in ipairs(vim.api.nvim_list_wins()) do
+            if vim.api.nvim_win_get_buf(win) == buf then
+              pcall(vim.api.nvim_win_close, win, true)
+              break
+            end
           end
-        end
+        end, 2000)
       end, 100)
     end,
   })
