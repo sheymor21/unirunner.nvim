@@ -90,13 +90,13 @@ Create project-specific commands by running `:UniRunnerConfig` or manually creat
 require('unirunner').setup({
   -- Terminal to use: 'toggleterm' or 'native'
   terminal = 'toggleterm',
-  
+
   -- Persist last command across sessions
   persist = true,
-  
+
   -- Working directory: 'root' (project root) or 'cwd' (current directory)
   working_dir = 'root',
-  
+
   -- Markers to find project root (in order of priority)
   root_markers = {
     'package.json',
@@ -104,6 +104,12 @@ require('unirunner').setup({
     '*.sln',
     '.git',
   },
+
+  -- Delay in milliseconds before closing terminal after process finishes (0 to disable auto-close)
+  close_delay = 2000,
+
+  -- Delay in milliseconds before closing terminal after cancel (0 to disable auto-close)
+  cancel_close_delay = 100,
 })
 ```
 
@@ -158,6 +164,15 @@ The plugin automatically saves the last 3 command outputs:
 - ANSI escape codes are stripped for clean viewing
 - Distinguishes between completed and cancelled runs
 - Access via `:UniRunnerHistory`
+
+## Terminal Auto-Close
+
+The plugin can automatically close terminals after the process finishes:
+- `close_delay`: Delay (in ms) before closing after normal execution (default: 2000ms)
+- `cancel_close_delay`: Delay (in ms) before closing after cancel (default: 100ms)
+- Set to `0` to disable auto-close and keep terminals open
+
+This allows you to review output before the terminal closes automatically.
 
 ## API
 
