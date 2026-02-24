@@ -242,10 +242,30 @@ function M.close_panel()
 end
 
 function M.cancel()
+  -- First try to cancel via terminal module (for job-based execution)
+  local terminal = require('unirunner.terminal')
+  local running_tasks = terminal.get_running_tasks()
+  
+  -- Get list of running task IDs
+  local task_ids = {}
+  for task_id, _ in pairs(running_tasks) do
+    table.insert(task_ids, task_id)
+  end
+  
+  if #task_ids > 0 then
+    -- Cancel the most recent running task
+    local task_id = task_ids[1]
+    if terminal.cancel_task(task_id) then
+      vim.notify('UniRunner: Cancelled running process', vim.log.levels.INFO)
+      return
+    end
+  end
+  
+  -- Fallback to old terminal window method
   local terminals = get_terminal_windows()
   
   if #terminals == 0 then
-    vim.notify('UniRunner: No running terminals found', vim.log.levels.WARN)
+    vim.notify('UniRunner: No running processes found', vim.log.levels.WARN)
     return
   end
   

@@ -85,21 +85,43 @@ end
 -- Cancel a running task
 function M.cancel_task(task_id)
   local entry = running_tasks[task_id]
-  if entry and entry.terminal then
-    -- Send Ctrl+C to terminal
-    local ok, chan = pcall(vim.api.nvim_buf_get_var, entry.terminal.buf, 'terminal_job_id')
-    if ok and chan then
-      vim.api.nvim_chan_send(chan, '\x03')
-    end
+  if entry and entry.job_id then
+    local cfg = config.get()
+    local delay = cfg.cancel_close_delay
+    
+    -- Stop the job
+    vim.fn.jobstop(entry.job_id)
     
     -- Record as cancelled
-    record_task_complete(task_id, nil, '', true)
+    record_task_complete(task_id, nil, entry.output or '', true)
+    
+    -- Close output viewer after configured delay
+    if delay > 0 then
+      local output_viewer = require('unirunner.output_viewer')
+      vim.defer_fn(function()
+        if output_viewer.is_open() and output_viewer.get_current_process() == task_id then
+          output_viewer.close()
+        end
+      end, delay)
+    end
+    
     return true
   end
   return false
 end
 
 function M.run(command, root, on_output, is_cancel, command_name)
+  -- Check if any process is already running
+  local running_count = 0
+  for _ in pairs(running_tasks) do
+    running_count = running_count + 1
+  end
+  
+  if running_count > 0 then
+    vim.notify('UniRunner: A process is already running. Cancel it first with :UniRunnerCancel', vim.log.levels.WARN)
+    return nil
+  end
+  
   local cfg = config.get()
   local cwd = detector.get_working_dir(root)
   local delay = is_cancel and cfg.cancel_close_delay or cfg.close_delay
@@ -107,56 +129,56 @@ function M.run(command, root, on_output, is_cancel, command_name)
   -- Record task start
   local task_id = record_task_start(command_name or command, command)
   
-  if cfg.terminal == 'toggleterm' then
-    M.run_toggleterm(command, cwd, on_output, delay, task_id)
-  else
-    M.run_native(command, cwd, on_output, delay, task_id)
-  end
+  -- Open output viewer immediately with stylish header (standalone for direct execution)
+  local output_viewer = require('unirunner.output_viewer')
+  local entry = running_tasks[task_id]
+  -- Use full view (no panel) for direct command execution
+  output_viewer.open_standalone(entry)
+  
+  -- Run command using jobstart and capture output
+  M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
   
   return task_id
 end
 
-function M.run_toggleterm(command, cwd, on_output, delay, task_id)
-  local ok, toggleterm = pcall(require, 'toggleterm.terminal')
-  if not ok then
-    M.run_native(command, cwd, on_output, delay, task_id)
-    return
-  end
-  
-  local Terminal = toggleterm.Terminal
+-- Run command and capture output to output viewer
+function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
   local output_lines = {}
-  local terminal_buf = nil
+  local output_viewer = require('unirunner.output_viewer')
   
-  local term = Terminal:new({
-    cmd = command,
-    dir = cwd,
-    direction = 'horizontal',
-    close_on_exit = false,
-    on_open = function(t)
-      terminal_buf = t.buf
-      if running_tasks[task_id] then
-        running_tasks[task_id].terminal = {
-          buf = terminal_buf,
-          term = t,
-        }
-      end
-    end,
-    on_stdout = function(_, _, data)
+  local job_id = vim.fn.jobstart(command, {
+    cwd = cwd,
+    on_stdout = function(_, data)
       if data then
-        vim.list_extend(output_lines, data)
-        -- Update live output for output viewer
-        local output_viewer = require('unirunner.output_viewer')
-        output_viewer.on_task_output(task_id, table.concat(data, '\n'))
+        for _, line in ipairs(data) do
+          if line ~= '' then
+            table.insert(output_lines, line)
+          end
+        end
+        -- Update live output
+        local output = table.concat(output_lines, '\n')
+        if running_tasks[task_id] then
+          running_tasks[task_id].output = output
+        end
+        output_viewer.on_task_output(task_id, output)
       end
     end,
-    on_stderr = function(_, _, data)
+    on_stderr = function(_, data)
       if data then
-        vim.list_extend(output_lines, data)
-        local output_viewer = require('unirunner.output_viewer')
-        output_viewer.on_task_output(task_id, table.concat(data, '\n'))
+        for _, line in ipairs(data) do
+          if line ~= '' then
+            table.insert(output_lines, line)
+          end
+        end
+        -- Update live output
+        local output = table.concat(output_lines, '\n')
+        if running_tasks[task_id] then
+          running_tasks[task_id].output = output
+        end
+        output_viewer.on_task_output(task_id, output)
       end
     end,
-    on_exit = function(t, job_id, exit_code)
+    on_exit = function(_, exit_code)
       local output = table.concat(output_lines, '\n')
       
       if on_output then
@@ -166,95 +188,21 @@ function M.run_toggleterm(command, cwd, on_output, delay, task_id)
       -- Record task completion
       record_task_complete(task_id, exit_code, output, false)
       
-      -- Close terminal after configured delay
+      -- Close output viewer after configured delay
       if delay > 0 then
         vim.defer_fn(function()
-          t:close()
+          if output_viewer.is_open() and output_viewer.get_current_process() == task_id then
+            output_viewer.close()
+          end
         end, delay)
       end
     end,
   })
   
-  term:toggle()
-  vim.defer_fn(function() vim.cmd('wincmd p') end, 100)
-end
-
-function M.run_native(command, cwd, on_output, delay, task_id)
-  local current_win = vim.api.nvim_get_current_win()
-  
-  vim.cmd('split')
-  vim.cmd('terminal ' .. command)
-  
-  local buf = vim.api.nvim_get_current_buf()
-  
-  if cwd then
-    vim.cmd('lcd ' .. cwd)
-  end
-  
-  vim.api.nvim_set_current_win(current_win)
-  
-  -- Store terminal info for potential cancellation
+  -- Store job ID for cancellation
   if running_tasks[task_id] then
-    running_tasks[task_id].terminal = {
-      buf = buf,
-    }
+    running_tasks[task_id].job_id = job_id
   end
-  
-  vim.api.nvim_create_autocmd('TermClose', {
-    buffer = buf,
-    once = true,
-    callback = function()
-      vim.defer_fn(function()
-        local ok, lines = pcall(vim.api.nvim_buf_get_lines, buf, 0, -1, false)
-        local output = ''
-        if ok then
-          output = table.concat(lines, '\n')
-        end
-        
-        if on_output then
-          on_output(output)
-        end
-        
-        -- Try to get exit code from terminal buffer
-        local exit_code = 0
-        local chan_ok, chan_id = pcall(vim.api.nvim_buf_get_var, buf, 'terminal_job_id')
-        if chan_ok and chan_id then
-          -- Exit code is not directly available, assume 0 if not cancelled
-          if running_tasks[task_id] then
-            exit_code = 0
-          end
-        end
-        
-        -- Record task completion
-        record_task_complete(task_id, exit_code, output, false)
-        
-        -- Close the terminal window after configured delay
-        if delay > 0 then
-          vim.defer_fn(function()
-            for _, win in ipairs(vim.api.nvim_list_wins()) do
-              if vim.api.nvim_win_get_buf(win) == buf then
-                pcall(vim.api.nvim_win_close, win, true)
-                break
-              end
-            end
-          end, delay)
-        end
-      end, 100)
-    end,
-  })
-  
-  -- Also capture stdout/stderr for live updates
-  vim.api.nvim_create_autocmd({'TextChanged', 'TextChangedI'}, {
-    buffer = buf,
-    callback = function()
-      local ok, lines = pcall(vim.api.nvim_buf_get_lines, buf, 0, -1, false)
-      if ok then
-        local output = table.concat(lines, '\n')
-        local output_viewer = require('unirunner.output_viewer')
-        output_viewer.on_task_output(task_id, output)
-      end
-    end,
-  })
 end
 
 return M

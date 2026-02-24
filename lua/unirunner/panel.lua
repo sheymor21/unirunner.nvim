@@ -332,11 +332,29 @@ end
 
 -- Close panel
 function M.close()
+  -- Save current window before closing
+  local current_win = vim.api.nvim_get_current_win()
+  
   if state.win and vim.api.nvim_win_is_valid(state.win) then
     vim.api.nvim_win_close(state.win, true)
   end
   -- Don't delete the buffer, just hide it so we can reuse it
   state.win, state.is_open = nil, false
+  
+  -- Check if there's a standalone output viewer running and resize it back to compact
+  local output_viewer = require('unirunner.output_viewer')
+  if output_viewer.is_open() and not output_viewer.is_split_view() then
+    -- Resize the standalone terminal back to compact size
+    local win = output_viewer.get_window()
+    if win and vim.api.nvim_win_is_valid(win) then
+      vim.api.nvim_win_set_height(win, 5)
+    end
+  end
+  
+  -- Return focus to editor (the window that was active before panel)
+  if current_win and vim.api.nvim_win_is_valid(current_win) and current_win ~= state.win then
+    vim.api.nvim_set_current_win(current_win)
+  end
 end
 
 -- Toggle panel
