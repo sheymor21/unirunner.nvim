@@ -3,16 +3,19 @@ local M = {}
 local config = require('unirunner.config')
 local detector = require('unirunner.detector')
 local persistence = require('unirunner.persistence')
+local utils = require('unirunner.utils')
 
 -- Track running tasks
 local running_tasks = {}
 
--- Generate unique task ID
+-- ============================================================================
+-- TASK MANAGEMENT
+-- ============================================================================
+
 local function generate_task_id()
   return string.format('%s-%s', os.time(), math.random(1000, 9999))
 end
 
--- Record task start
 local function record_task_start(command_name, full_command)
   local task_id = generate_task_id()
   local entry = {
@@ -31,22 +34,17 @@ local function record_task_start(command_name, full_command)
   persistence.save_rich_history(entry)
   running_tasks[task_id] = entry
   
-  -- Notify panel to refresh
   local panel = require('unirunner.panel')
   panel.on_history_update()
   
   return task_id
 end
 
--- Record task completion
 local function record_task_complete(task_id, exit_code, output, is_cancelled)
   local entry = running_tasks[task_id]
-  if not entry then
-    return
-  end
+  if not entry then return end
   
-  local end_time = os.clock()
-  local duration = end_time - entry.start_time
+  local duration = os.clock() - entry.start_time
   
   local status = 'success'
   if is_cancelled then
@@ -64,7 +62,6 @@ local function record_task_complete(task_id, exit_code, output, is_cancelled)
   
   running_tasks[task_id] = nil
   
-  -- Notify panel and output viewer to refresh
   local panel = require('unirunner.panel')
   panel.on_history_update()
   
@@ -72,37 +69,32 @@ local function record_task_complete(task_id, exit_code, output, is_cancelled)
   output_viewer.on_task_complete(task_id, status, output)
 end
 
--- Get running tasks
+-- ============================================================================
+-- PUBLIC API
+-- ============================================================================
+
 function M.get_running_tasks()
   return running_tasks
 end
 
--- Check if a task is running
 function M.is_task_running(task_id)
   return running_tasks[task_id] ~= nil
 end
 
--- Cancel a running task
 function M.cancel_task(task_id)
   local entry = running_tasks[task_id]
   if entry and entry.job_id then
-    local cfg = config.get()
-    local delay = cfg.cancel_close_delay
-    
-    -- Stop the job
     vim.fn.jobstop(entry.job_id)
-    
-    -- Record as cancelled
     record_task_complete(task_id, nil, entry.output or '', true)
     
-    -- Close output viewer after configured delay
-    if delay > 0 then
+    local cfg = config.get()
+    if cfg.cancel_close_delay > 0 then
       local output_viewer = require('unirunner.output_viewer')
       vim.defer_fn(function()
         if output_viewer.is_open() and output_viewer.get_current_process() == task_id then
           output_viewer.close()
         end
-      end, delay)
+      end, cfg.cancel_close_delay)
     end
     
     return true
@@ -126,22 +118,17 @@ function M.run(command, root, on_output, is_cancel, command_name)
   local cwd = detector.get_working_dir(root)
   local delay = is_cancel and cfg.cancel_close_delay or cfg.close_delay
   
-  -- Record task start
   local task_id = record_task_start(command_name or command, command)
   
-  -- Open output viewer immediately with stylish header (standalone for direct execution)
   local output_viewer = require('unirunner.output_viewer')
   local entry = running_tasks[task_id]
-  -- Use full view (no panel) for direct command execution
   output_viewer.open_standalone(entry)
   
-  -- Run command using jobstart and capture output
   M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
   
   return task_id
 end
 
--- Run command and capture output to output viewer
 function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
   local output_lines = {}
   local output_viewer = require('unirunner.output_viewer')
@@ -155,7 +142,6 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
             table.insert(output_lines, line)
           end
         end
-        -- Update live output
         local output = table.concat(output_lines, '\n')
         if running_tasks[task_id] then
           running_tasks[task_id].output = output
@@ -170,7 +156,6 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
             table.insert(output_lines, line)
           end
         end
-        -- Update live output
         local output = table.concat(output_lines, '\n')
         if running_tasks[task_id] then
           running_tasks[task_id].output = output
@@ -185,10 +170,8 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
         on_output(output)
       end
       
-      -- Record task completion
       record_task_complete(task_id, exit_code, output, false)
       
-      -- Close output viewer after configured delay
       if delay > 0 then
         vim.defer_fn(function()
           if output_viewer.is_open() and output_viewer.get_current_process() == task_id then
@@ -199,7 +182,6 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
     end,
   })
   
-  -- Store job ID for cancellation
   if running_tasks[task_id] then
     running_tasks[task_id].job_id = job_id
   end

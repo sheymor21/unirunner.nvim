@@ -1,0 +1,30 @@
+local M = {}
+
+local persistence = require('unirunner.persistence')
+local config = require('unirunner.config')
+local utils = require('unirunner.utils')
+
+-- State
+local state = {
+  buf = nil, win = nil, entry = nil,
+  is_open = false, is_split = false,
+  is_live = false, is_following = true,
+  panel_win = nil, standalone_process_id = nil,
+}
+
+
+-- Detected ports from output
+local detected_ports = {}
+
+
+-- Animation timer
+local animation_timer = nil
+
+-- ============================================================================
+-- BUFFER & WINDOW SETUP
+-- ============================================================================�
+
+local function setup_buffer()
+  -- Check if buffer already exists
+  local existing_buf = vim.fn.bufnr('UniRunner Output')
+  if existing_buf ~= 

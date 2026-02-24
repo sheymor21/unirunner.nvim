@@ -1,14 +1,20 @@
 local M = {}
 
 local config = require('unirunner.config')
+local utils = require('unirunner.utils')
 
 local data_path = vim.fn.stdpath('data') .. '/unirunner'
 local data_file = data_path .. '/projects.json'
 local history_file = data_path .. '/history.json'
 
--- In-memory cache
+-- In-memory caches
+local file_cache = {}
 local output_history = {}
 local max_history = 5
+
+-- ============================================================================
+-- FILE OPERATIONS (with caching)
+-- ============================================================================
 
 local function ensure_data_dir()
   if vim.fn.isdirectory(data_path) == 0 then
@@ -16,23 +22,29 @@ local function ensure_data_dir()
   end
 end
 
-local function load_json_file(filepath)
-  if vim.fn.filereadable(filepath) == 0 then return {} end
-  
-  local ok, data = pcall(vim.json.decode, table.concat(vim.fn.readfile(filepath), '\n'))
-  return ok and data or {}
+---Load JSON file with caching
+---@param filepath string Path to JSON file
+---@return table Decoded data
+function M.load_json_file(filepath)
+  return utils.load_json_file(filepath, file_cache)
 end
 
-local function save_json_file(filepath, data)
+---Save JSON file with cache invalidation
+---@param filepath string Path to JSON file
+---@param data table Data to save
+function M.save_json_file(filepath, data)
   ensure_data_dir()
-  local ok, json_str = pcall(vim.json.encode, data)
-  if ok then
-    vim.fn.writefile(vim.split(json_str, '\n'), filepath)
-  end
+  utils.save_json_file(filepath, data, file_cache)
 end
 
--- Helper: Sort history with pinned first
-local function sort_history(history)
+-- ============================================================================
+-- HISTORY SORTING
+-- ============================================================================
+
+---Sort history with pinned first, limit unpinned
+---@param history table History entries
+---@return table Sorted and limited history
+function M.sort_history(history)
   local pinned, unpinned = {}, {}
   for _, e in ipairs(history) do
     table.insert(e.pinned and pinned or unpinned, e)
@@ -50,7 +62,10 @@ local function sort_history(history)
   return result
 end
 
--- Legacy in-memory history (backward compatibility)
+-- ============================================================================
+-- LEGACY IN-MEMORY HISTORY (backward compatibility)
+-- ============================================================================
+
 function M.save_output(command, output, is_cancelled)
   table.insert(output_history, 1, {
     command = command,
@@ -72,56 +87,59 @@ function M.clear_output_history()
   output_history = {}
 end
 
--- Rich persistent history
+-- ============================================================================
+-- RICH PERSISTENT HISTORY
+-- ============================================================================
+
 function M.save_rich_history(entry)
-  local history = load_json_file(history_file)
+  local history = M.load_json_file(history_file)
   table.insert(history, 1, entry)
-  save_json_file(history_file, sort_history(history))
+  M.save_json_file(history_file, M.sort_history(history))
 end
 
 function M.get_rich_history()
-  return load_json_file(history_file)
+  return M.load_json_file(history_file)
 end
 
 function M.clear_rich_history()
-  save_json_file(history_file, {})
+  M.save_json_file(history_file, {})
 end
 
 function M.pin_entry(entry_id)
-  local history = load_json_file(history_file)
+  local history = M.load_json_file(history_file)
   for _, entry in ipairs(history) do
     if entry.id == entry_id then
       entry.pinned = true
       break
     end
   end
-  save_json_file(history_file, sort_history(history))
+  M.save_json_file(history_file, M.sort_history(history))
 end
 
 function M.unpin_entry(entry_id)
-  local history = load_json_file(history_file)
+  local history = M.load_json_file(history_file)
   for _, entry in ipairs(history) do
     if entry.id == entry_id then
       entry.pinned = false
       break
     end
   end
-  save_json_file(history_file, sort_history(history))
+  M.save_json_file(history_file, M.sort_history(history))
 end
 
 function M.delete_entry(entry_id)
-  local history = load_json_file(history_file)
+  local history = M.load_json_file(history_file)
   for i, entry in ipairs(history) do
     if entry.id == entry_id then
       table.remove(history, i)
       break
     end
   end
-  save_json_file(history_file, history)
+  M.save_json_file(history_file, history)
 end
 
 function M.update_entry_status(entry_id, updates)
-  local history = load_json_file(history_file)
+  local history = M.load_json_file(history_file)
   for _, entry in ipairs(history) do
     if entry.id == entry_id then
       for k, v in pairs(updates) do
@@ -130,11 +148,11 @@ function M.update_entry_status(entry_id, updates)
       break
     end
   end
-  save_json_file(history_file, history)
+  M.save_json_file(history_file, history)
 end
 
 function M.get_entry_by_id(entry_id)
-  for _, entry in ipairs(load_json_file(history_file)) do
+  for _, entry in ipairs(M.load_json_file(history_file)) do
     if entry.id == entry_id then
       return entry
     end
@@ -144,7 +162,7 @@ end
 
 function M.get_running_entries()
   local running = {}
-  for _, entry in ipairs(load_json_file(history_file)) do
+  for _, entry in ipairs(M.load_json_file(history_file)) do
     if entry.status == 'running' then
       table.insert(running, entry)
     end
@@ -152,20 +170,27 @@ function M.get_running_entries()
   return running
 end
 
--- Legacy project data functions
+-- ============================================================================
+-- PROJECT DATA
+-- ============================================================================
+
 function M.get_project_data(root)
   if not config.get().persist then return {} end
-  return load_json_file(data_file)[root] or {}
+  return M.load_json_file(data_file)[root] or {}
 end
 
 function M.save_last_command(root, command)
   if not config.get().persist then return end
-  local data = load_json_file(data_file)
+  local data = M.load_json_file(data_file)
   data[root] = data[root] or {}
   data[root].last_command = command
   data[root].last_run_at = os.date('%Y-%m-%dT%H:%M:%SZ')
-  save_json_file(data_file, data)
+  M.save_json_file(data_file, data)
 end
+
+-- ============================================================================
+-- LOCAL CONFIG
+-- ============================================================================
 
 function M.load_local_config(root)
   local config_file = root .. '/.unirunner.json'
