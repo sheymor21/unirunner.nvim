@@ -25,7 +25,8 @@ local function get_terminal_windows()
   return terminals
 end
 
-local function get_all_commands(root)
+-- Expose for panel module
+function M.get_all_commands(root)
   local commands = {}
   
   local local_config = persistence.load_local_config(root)
@@ -50,17 +51,26 @@ local function get_all_commands(root)
   return commands
 end
 
-local function execute_command(cmd)
+-- Expose for panel module
+function M.execute_command(cmd)
   if not cmd then return end
   last_command = cmd
-  persistence.save_last_command(current_root, cmd.name)
-  terminal.run(cmd.command, current_root, function(output)
+  
+  -- Find root if not already set
+  local root = current_root or detector.find_root()
+  if not root then
+    vim.notify('UniRunner: No project root found', vim.log.levels.ERROR)
+    return
+  end
+  
+  persistence.save_last_command(root, cmd.name)
+  terminal.run(cmd.command, root, function(output)
     persistence.save_output(cmd.name, output)
-  end)
+  end, false, cmd.name)
 end
 
 local function show_picker()
-  local commands = get_all_commands(current_root)
+  local commands = M.get_all_commands(current_root)
   
   if #commands == 1 then
     vim.notify('UniRunner: No run commands found. Use :UniRunnerConfig to set one.', vim.log.levels.ERROR)
@@ -77,11 +87,11 @@ local function show_picker()
           local_config.custom_commands = local_config.custom_commands or {}
           local_config.custom_commands[custom_cmd.name] = custom_cmd.command
           persistence.save_local_config(current_root, local_config)
-          execute_command(custom_cmd)
+          M.execute_command(custom_cmd)
         end
       end)
     else
-      execute_command(selected)
+      M.execute_command(selected)
     end
   end)
 end
@@ -99,9 +109,9 @@ function M.run()
   
   local project_data = persistence.get_project_data(current_root)
   if project_data.last_command then
-    for _, cmd in ipairs(get_all_commands(current_root)) do
+    for _, cmd in ipairs(M.get_all_commands(current_root)) do
       if cmd.name == project_data.last_command then
-        execute_command(cmd)
+        M.execute_command(cmd)
         return
       end
     end
@@ -132,9 +142,9 @@ function M.run_last()
     return
   end
   
-  for _, cmd in ipairs(get_all_commands(current_root)) do
+  for _, cmd in ipairs(M.get_all_commands(current_root)) do
     if cmd.name == project_data.last_command then
-      execute_command(cmd)
+      M.execute_command(cmd)
       return
     end
   end
@@ -202,42 +212,33 @@ function M.is_active()
   return root ~= nil and select(2, runners.detect_runner(root)) ~= nil
 end
 
+-- Legacy history functions (for backward compatibility)
 function M.show_output_history()
-  local history = persistence.get_output_history()
-  
-  if #history == 0 then
-    vim.notify('UniRunner: No output history available', vim.log.levels.WARN)
-    return
-  end
-  
-  local options = {}
-  for i, entry in ipairs(history) do
-    table.insert(options, string.format('%d. %s [%s] %s', i, entry.is_cancelled and '[CANCELLED]' or '[COMPLETED]', entry.timestamp, entry.command))
-  end
-  
-  vim.ui.select(options, { prompt = 'Select output to view:' }, function(_, idx)
-    if idx then
-      local entry = history[idx]
-      local buf_name = 'UniRunner Output: ' .. entry.command
-      local existing_buf = vim.fn.bufnr(buf_name)
-      
-      if existing_buf == -1 then
-        existing_buf = vim.api.nvim_create_buf(false, true)
-        vim.api.nvim_buf_set_lines(existing_buf, 0, -1, false, vim.split(entry.output, '\n'))
-        vim.api.nvim_buf_set_option(existing_buf, 'modifiable', false)
-        vim.api.nvim_buf_set_option(existing_buf, 'buftype', 'nofile')
-        vim.api.nvim_buf_set_name(existing_buf, buf_name)
-      end
-      
-      vim.cmd('split')
-      vim.api.nvim_win_set_buf(0, existing_buf)
-    end
-  end)
+  -- Use new panel instead
+  local panel = require('unirunner.panel')
+  panel.open()
 end
 
 function M.clear_output_history()
   persistence.clear_output_history()
+  persistence.clear_rich_history()
   vim.notify('UniRunner: Output history cleared', vim.log.levels.INFO)
+end
+
+-- New panel functions
+function M.toggle_panel()
+  local panel = require('unirunner.panel')
+  panel.toggle()
+end
+
+function M.open_panel()
+  local panel = require('unirunner.panel')
+  panel.open()
+end
+
+function M.close_panel()
+  local panel = require('unirunner.panel')
+  panel.close()
 end
 
 function M.cancel()

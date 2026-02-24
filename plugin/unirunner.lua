@@ -29,8 +29,21 @@ end, { desc = 'Cancel running terminal process' })
 
 vim.api.nvim_create_user_command('UniRunnerHistory', function()
   require('unirunner').show_output_history()
-end, { desc = 'Show last 3 command outputs' })
+end, { desc = 'Show command history panel' })
 
 vim.api.nvim_create_user_command('UniRunnerClearHistory', function()
   require('unirunner').clear_output_history()
-end, { desc = 'Clear output history' })
+end, { desc = 'Clear command history' })
+
+-- New panel commands
+vim.api.nvim_create_user_command('UniRunnerPanel', function()
+  require('unirunner').toggle_panel()
+end, { desc = 'Toggle command history panel' })
+
+vim.api.nvim_create_user_command('UniRunnerPanelOpen', function()
+  require('unirunner').open_panel()
+end, { desc = 'Open command history panel' })
+
+vim.api.nvim_create_user_command('UniRunnerPanelClose', function()
+  require('unirunner').close_panel()
+end, { desc = 'Close command history panel' })
