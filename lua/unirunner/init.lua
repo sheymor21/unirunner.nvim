@@ -6,6 +6,7 @@ local runners = require('unirunner.runners')
 local persistence = require('unirunner.persistence')
 local ui = require('unirunner.ui')
 local terminal = require('unirunner.terminal')
+local utils = require('unirunner.utils')
 
 -- Register runners
 runners.register('javascript', require('unirunner.runners.javascript'))
@@ -14,16 +15,6 @@ runners.register('go', require('unirunner.runners.go'))
 runners.register('csharp', require('unirunner.runners.csharp'))
 
 local current_root, last_command
-
-local function get_terminal_windows()
-  local terminals = {}
-  for _, win in ipairs(vim.api.nvim_list_wins()) do
-    if vim.api.nvim_buf_get_option(vim.api.nvim_win_get_buf(win), 'buftype') == 'terminal' then
-      table.insert(terminals, win)
-    end
-  end
-  return terminals
-end
 
 -- Expose for panel module
 function M.get_all_commands(root)
@@ -167,7 +158,7 @@ function M.open_config()
 end
 
 function M.goto_terminal()
-  local terminals = get_terminal_windows()
+  local terminals = utils.get_terminal_windows()
   
   if #terminals == 0 then
     vim.notify('UniRunner: No terminal windows found', vim.log.levels.WARN)
@@ -262,7 +253,7 @@ function M.cancel()
   end
   
   -- Fallback to old terminal window method
-  local terminals = get_terminal_windows()
+  local terminals = utils.get_terminal_windows()
   
   if #terminals == 0 then
     vim.notify('UniRunner: No running processes found', vim.log.levels.WARN)

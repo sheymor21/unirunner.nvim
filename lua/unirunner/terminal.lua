@@ -4,6 +4,7 @@ local config = require('unirunner.config')
 local detector = require('unirunner.detector')
 local persistence = require('unirunner.persistence')
 local utils = require('unirunner.utils')
+local runner_viewer = require('unirunner.runner_viewer')
 
 -- Track running tasks
 local running_tasks = {}
@@ -65,8 +66,7 @@ local function record_task_complete(task_id, exit_code, output, is_cancelled)
   local panel = require('unirunner.panel')
   panel.on_history_update()
   
-  local output_viewer = require('unirunner.output_viewer')
-  output_viewer.on_task_complete(task_id, status, output)
+  runner_viewer.on_task_complete(task_id, status, output)
 end
 
 -- ============================================================================
@@ -85,14 +85,21 @@ function M.cancel_task(task_id)
   local entry = running_tasks[task_id]
   if entry and entry.job_id then
     vim.fn.jobstop(entry.job_id)
-    record_task_complete(task_id, nil, entry.output or '', true)
+    -- Wait a bit for any final output to be captured
+    vim.defer_fn(function()
+      -- Get the complete output from output_lines if available
+      local output = entry.output or ''
+      if entry.output_lines and #entry.output_lines > 0 then
+        output = table.concat(entry.output_lines, '\n')
+      end
+      record_task_complete(task_id, nil, output, true)
+    end, 100)
     
     local cfg = config.get()
     if cfg.cancel_close_delay > 0 then
-      local output_viewer = require('unirunner.output_viewer')
       vim.defer_fn(function()
-        if output_viewer.is_open() and output_viewer.get_current_process() == task_id then
-          output_viewer.close()
+        if runner_viewer.is_open() and runner_viewer.get_task_id() == task_id then
+          runner_viewer.close()
         end
       end, cfg.cancel_close_delay)
     end
@@ -120,9 +127,7 @@ function M.run(command, root, on_output, is_cancel, command_name)
   
   local task_id = record_task_start(command_name or command, command)
   
-  local output_viewer = require('unirunner.output_viewer')
-  local entry = running_tasks[task_id]
-  output_viewer.open_standalone(entry)
+  runner_viewer.open(task_id)
   
   M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
   
@@ -131,7 +136,11 @@ end
 
 function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
   local output_lines = {}
-  local output_viewer = require('unirunner.output_viewer')
+  
+  -- Store reference to output_lines in the task entry for cancellation
+  if running_tasks[task_id] then
+    running_tasks[task_id].output_lines = output_lines
+  end
   
   local job_id = vim.fn.jobstart(command, {
     cwd = cwd,
@@ -140,13 +149,13 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
         for _, line in ipairs(data) do
           if line ~= '' then
             table.insert(output_lines, line)
+            runner_viewer.on_task_output(task_id, line)
           end
         end
         local output = table.concat(output_lines, '\n')
         if running_tasks[task_id] then
           running_tasks[task_id].output = output
         end
-        output_viewer.on_task_output(task_id, output)
       end
     end,
     on_stderr = function(_, data)
@@ -154,13 +163,13 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
         for _, line in ipairs(data) do
           if line ~= '' then
             table.insert(output_lines, line)
+            runner_viewer.on_task_output(task_id, line)
           end
         end
         local output = table.concat(output_lines, '\n')
         if running_tasks[task_id] then
           running_tasks[task_id].output = output
         end
-        output_viewer.on_task_output(task_id, output)
       end
     end,
     on_exit = function(_, exit_code)
@@ -174,8 +183,8 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
       
       if delay > 0 then
         vim.defer_fn(function()
-          if output_viewer.is_open() and output_viewer.get_current_process() == task_id then
-            output_viewer.close()
+          if runner_viewer.is_open() and runner_viewer.get_task_id() == task_id then
+            runner_viewer.close()
           end
         end, delay)
       end

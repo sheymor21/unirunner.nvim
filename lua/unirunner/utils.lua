@@ -374,4 +374,144 @@ function M.process_output(text, status)
   return lines
 end
 
+-- ============================================================================
+-- UI UTILITIES (Extracted from duplicate code)
+-- ============================================================================
+
+---Create a buffer with standard options
+---@param name string Buffer name
+---@param filetype string Filetype for the buffer
+---@return number Buffer handle
+function M.create_buffer(name, filetype)
+  local existing_buf = vim.fn.bufnr(name)
+  if existing_buf ~= -1 and vim.api.nvim_buf_is_valid(existing_buf) then
+    return existing_buf
+  end
+  
+  local buf = vim.api.nvim_create_buf(false, true)
+  vim.api.nvim_buf_set_option(buf, 'buftype', 'nofile')
+  vim.api.nvim_buf_set_option(buf, 'bufhidden', 'hide')
+  vim.api.nvim_buf_set_option(buf, 'swapfile', false)
+  vim.api.nvim_buf_set_option(buf, 'modifiable', false)
+  vim.api.nvim_buf_set_option(buf, 'filetype', filetype)
+  vim.api.nvim_buf_set_name(buf, name)
+  return buf
+end
+
+---Setup standard window options
+---@param win number Window handle
+---@param opts table|nil Optional overrides
+function M.setup_window_options(win, opts)
+  opts = opts or {}
+  local defaults = {
+    number = false,
+    relativenumber = false,
+    cursorline = false,
+    signcolumn = 'no',
+    foldcolumn = '0',
+    wrap = true,
+  }
+  local options = vim.tbl_extend('force', defaults, opts)
+  
+  for opt, value in pairs(options) do
+    vim.api.nvim_win_set_option(win, opt, value)
+  end
+end
+
+---Apply highlights to a buffer
+---@param buf number Buffer handle
+---@param highlights table List of highlight definitions
+---@param namespace_name string Namespace name
+function M.apply_highlights(buf, highlights, namespace_name)
+  vim.api.nvim_buf_clear_namespace(buf, -1, 0, -1)
+  local ns = vim.api.nvim_create_namespace(namespace_name)
+  
+  for _, hl in ipairs(highlights) do
+    vim.api.nvim_buf_add_highlight(buf, ns, hl.hl_group, hl.line - 1, hl.col, hl.end_col)
+  end
+end
+
+---Split output string into lines
+---@param output string Raw output text
+---@return table List of lines
+function M.split_output_to_lines(output)
+  local lines = {}
+  for line in output:gmatch('[^\r\n]+') do
+    table.insert(lines, line)
+  end
+  return lines
+end
+
+---Get keymaps from config
+---@return table Keymaps table
+function M.get_keymaps()
+  local config = require('unirunner.config')
+  return config.get().panel and config.get().panel.keymaps or {}
+end
+
+---Rerun a command from history
+---@param entry table History entry
+---@param close_fn function Function to close current window
+---@return boolean Success
+function M.rerun_command(entry, close_fn)
+  if not entry then return false end
+  
+  close_fn()
+  local unirunner = require('unirunner')
+  local current_root = require('unirunner.detector').find_root()
+  
+  if current_root then
+    for _, cmd in ipairs(unirunner.get_all_commands(current_root)) do
+      if cmd.name == entry.command then
+        unirunner.execute_command(cmd)
+        return true
+      end
+    end
+  end
+  
+  vim.notify('UniRunner: Command not found: ' .. entry.command, vim.log.levels.ERROR)
+  return false
+end
+
+---Create navigation functions for a window state
+---@param state table Window state with buf and win
+---@return table Navigation functions
+function M.create_navigation_functions(state)
+  return {
+    scroll_down = function() vim.cmd('normal! j') end,
+    scroll_up = function() vim.cmd('normal! k') end,
+    goto_top = function() vim.cmd('normal! gg') end,
+    goto_bottom = function()
+      if state.win and vim.api.nvim_win_is_valid(state.win) then
+        local line_count = vim.api.nvim_buf_line_count(state.buf)
+        vim.api.nvim_win_set_cursor(state.win, { line_count, 0 })
+      end
+    end,
+  }
+end
+
+---Create a refresh timer
+---@param interval number Interval in milliseconds
+---@param should_refresh_fn function Function returning true if should refresh
+---@param refresh_fn function Function to call for refresh
+---@return number Timer ID
+function M.create_refresh_timer(interval, should_refresh_fn, refresh_fn)
+  local timer = vim.fn.timer_start(interval, function()
+    if should_refresh_fn() then
+      refresh_fn()
+    else
+      return true -- Stop timer
+    end
+  end, { ['repeat'] = -1 })
+  return timer
+end
+
+---Stop a timer safely
+---@param timer number|nil Timer ID
+function M.stop_timer(timer)
+  if timer then
+    vim.fn.timer_stop(timer)
+  end
+end
+
 return M
