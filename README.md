@@ -1,6 +1,6 @@
 # unirunner.nvim
 
-A universal project runner plugin for Neovim with automatic project detection, command persistence, and easy extensibility.
+A universal project runner plugin for Neovim with automatic project detection, rich history tracking, live output preview, and easy extensibility.
 
 ## Features
 
@@ -8,13 +8,14 @@ A universal project runner plugin for Neovim with automatic project detection, c
 - **Multi-language support** - JavaScript/TypeScript, Go, C#, Lua out of the box
 - **Package manager detection** - Automatically detects npm, yarn, pnpm, or bun
 - **Command persistence** - Remembers and re-runs your last command
+- **Rich history panel** - Browse, preview, and re-run previous commands with full output
+- **Live output preview** - See output while commands are running
+- **Live preview on navigation** - Preview outputs as you navigate history
 - **Custom commands** - Create project-specific custom run commands
-- **Output history** - View last 3 command outputs with ANSI codes stripped
 - **Terminal management** - Jump to terminals, cancel running processes
 - **Easy extensibility** - Simple API to add support for new languages
-- **vim.ui.select integration** - Native Neovim UI, no external dependencies
-- **Toggleterm support** - Optional integration with toggleterm.nvim
-- **Window picker support** - Works with nvim-window-picker for terminal selection
+- **Colemak-friendly keymaps** - Default keymaps support Colemak layout
+- **No external dependencies** - Pure Neovim Lua
 
 ## Installation
 
@@ -23,12 +24,6 @@ Using [lazy.nvim](https://github.com/folke/lazy.nvim):
 ```lua
 {
   'sheymor21/unirunner.nvim',
-  dependencies = {
-    -- Optional: for better terminal experience
-    'akinsho/toggleterm.nvim',
-    -- Optional: for window picking
-    's1n7ax/nvim-window-picker',
-  },
   config = function()
     require('unirunner').setup()
   end,
@@ -39,7 +34,7 @@ Using [packer.nvim](https://github.com/wbthomason/packer.nvim):
 
 ```lua
 use {
-  'yourusername/unirunner.nvim',
+  'sheymor21/unirunner.nvim',
   config = function()
     require('unirunner').setup()
   end,
@@ -56,19 +51,32 @@ use {
 | `:UniRunnerSelect` | Always show command picker |
 | `:UniRunnerLast` | Re-run the last executed command |
 | `:UniRunnerConfig` | Open project configuration file |
-| `:UniRunnerTerminal` | Jump to terminal window (uses window-picker if available) |
-| `:UniRunnerCancel` | Cancel running terminal process |
-| `:UniRunnerHistory` | Show last 3 command outputs |
-| `:UniRunnerClearHistory` | Clear output history |
+| `:UniRunnerTerminal` | Jump to terminal window |
+| `:UniRunnerCancel` | Cancel running process |
+| `:UniRunnerPanel` or `:UniRunnerHistory` | Toggle history panel |
+| `:UniRunnerPanelOpen` | Open history panel |
+| `:UniRunnerPanelClose` | Close history panel |
 
 ### Workflow
 
 1. Navigate to a supported project (JS/TS, Go, C#, Lua)
 2. Run `:UniRunner` or `:UniRunnerSelect`
 3. Select a command from detected scripts or create a custom one
-4. The command runs in a terminal (toggleterm or native)
+4. The command runs with live output shown in a bottom panel
 5. Next time, `:UniRunner` will re-run the same command immediately
-6. Use `:UniRunnerHistory` to view previous outputs
+6. Use `:UniRunnerPanel` to browse history, preview outputs, and re-run commands
+
+### History Panel
+
+The history panel provides a rich interface for managing your command history:
+
+- **Navigation**: Use `j/k` (or `n/e` for Colemak) to navigate entries
+- **Preview**: Automatically previews output as you navigate
+- **View**: Press `Enter` to open the full output view
+- **Pin**: Press `p` to pin important entries
+- **Delete**: Press `d` to delete an entry
+- **Re-run**: Press `r` to re-run a command
+- **Close**: Press `q` to close the panel
 
 ### Custom Commands
 
@@ -88,9 +96,6 @@ Create project-specific commands by running `:UniRunnerConfig` or manually creat
 
 ```lua
 require('unirunner').setup({
-  -- Terminal to use: 'toggleterm' or 'native'
-  terminal = 'toggleterm',
-
   -- Persist last command across sessions
   persist = true,
 
@@ -105,11 +110,35 @@ require('unirunner').setup({
     '.git',
   },
 
-  -- Delay in milliseconds before closing terminal after process finishes (0 to disable auto-close)
+  -- Delay in milliseconds before closing runner after process finishes (0 to disable auto-close)
   close_delay = 2000,
 
-  -- Delay in milliseconds before closing terminal after cancel (0 to disable auto-close)
+  -- Delay in milliseconds before closing runner after cancel (0 to disable auto-close)
   cancel_close_delay = 100,
+
+  -- Panel configuration
+  panel = {
+    -- Default panel height
+    height = 15,
+    -- Auto-follow output (scroll to bottom)
+    auto_follow = true,
+    -- Keymaps (Colemak-friendly defaults)
+    keymaps = {
+      down = 'n',           -- Move down (Colemak: n)
+      up = 'e',             -- Move up (Colemak: e)
+      scroll_down = 'n',    -- Scroll output down
+      scroll_up = 'e',      -- Scroll output up
+      view_output = '<CR>', -- View full output
+      pin = 'p',            -- Pin/unpin entry
+      delete = 'd',         -- Delete entry
+      clear_all = 'D',      -- Clear all history
+      rerun = 'r',          -- Re-run command
+      cancel = 'c',         -- Cancel running process
+      restart = 'R',        -- Restart command
+      follow = 'r',         -- Resume following output
+      close = 'q',          -- Close panel
+    },
+  },
 })
 ```
 
@@ -124,7 +153,7 @@ vim.keymap.set('n', '<leader>rl', '<cmd>UniRunnerLast<cr>', { desc = 'Run last p
 vim.keymap.set('n', '<leader>rc', '<cmd>UniRunnerConfig<cr>', { desc = 'Edit project config' })
 vim.keymap.set('n', '<leader>rt', '<cmd>UniRunnerTerminal<cr>', { desc = 'Go to terminal' })
 vim.keymap.set('n', '<leader>rC', '<cmd>UniRunnerCancel<cr>', { desc = 'Cancel runner' })
-vim.keymap.set('n', '<leader>rh', '<cmd>UniRunnerHistory<cr>', { desc = 'Show output history' })
+vim.keymap.set('n', '<leader>rh', '<cmd>UniRunnerPanel<cr>', { desc = 'Toggle history panel' })
 ```
 
 ## Supported Languages
@@ -158,38 +187,28 @@ The plugin detects package managers by checking for lock files in this priority:
 4. `package-lock.json` → npm
 5. None → npm (fallback)
 
-## Output History
+## History & Output Preview
 
-The plugin automatically saves the last 3 command outputs:
-- ANSI escape codes are stripped for clean viewing
-- Distinguishes between completed and cancelled runs
-- Access via `:UniRunnerHistory`
+The plugin now features a rich history system:
 
-## Terminal Auto-Close
+- **Persistent history** - Command history is saved to disk (configurable limit)
+- **Pinned entries** - Pin important commands to keep them at the top
+- **Live preview** - Preview outputs as you navigate history entries
+- **Full output view** - Press Enter to view complete output in a split
+- **Status tracking** - See success, failure, or cancelled status for each run
+- **Duration tracking** - View how long each command took
+- **Live entries** - Running commands show "LIVE" badge and can be viewed in real-time
 
-The plugin can automatically close terminals after the process finishes:
-- `close_delay`: Delay (in ms) before closing after normal execution (default: 2000ms)
-- `cancel_close_delay`: Delay (in ms) before closing after cancel (default: 100ms)
-- Set to `0` to disable auto-close and keep terminals open
+## Architecture
 
-This allows you to review output before the terminal closes automatically.
+The plugin is built with a modular architecture:
 
-## API
-
-```lua
-local unirunner = require('unirunner')
-
--- Check if a runner is active for current project
-if unirunner.is_active() then
-  print("Project detected!")
-end
-
--- Run commands programmatically
-unirunner.run()           -- Smart run (last or picker)
-unirunner.run_select()    -- Force picker
-unirunner.run_last()      -- Repeat last
-unirunner.cancel()        -- Cancel current terminal
-```
+- **`runner_viewer`** - Live runner terminal (bottom split, shows header only)
+- **`history_viewer`** - Output preview and full view (right split)
+- **`panel`** - History browser (left split)
+- **`terminal`** - Task management and job control
+- **`persistence`** - History storage and retrieval
+- **`utils`** - Shared utilities (buffer creation, window setup, etc.)
 
 ## Extending with New Languages
 
@@ -237,15 +256,14 @@ runners.register('python', python)
 
 ## Storage
 
-- **Global persistence**: `~/.local/share/nvim/unirunner/projects.json`
+- **Global persistence**: `~/.local/share/nvim/unirunner/history.json`
 - **Per-project config**: `.unirunner.json` in project root
-- **Output history**: In-memory only (last 3 runs)
+- **Rich history**: Persistent with pinning and status tracking
 
 ## Requirements
 
 - Neovim >= 0.7.0
-- [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) (optional, for better terminal experience)
-- [nvim-window-picker](https://github.com/s1n7ax/nvim-window-picker) (optional, for window selection)
+- No external dependencies required
 
 ## License
 
