@@ -32,7 +32,11 @@ function M.get_all_commands(root)
     local runner_module = runners.get_all()[runner]
     if runner_module and runner_module.get_commands then
       for _, cmd in ipairs(runner_module.get_commands(root)) do
-        table.insert(commands, { name = cmd.name, command = cmd.command, display = cmd.name .. ' (' .. cmd.command .. ')', is_custom = false })
+        local display = cmd.name .. ' (' .. cmd.command .. ')'
+        if cmd.url then
+          display = display .. ' [' .. cmd.url .. ']'
+        end
+        table.insert(commands, { name = cmd.name, command = cmd.command, display = display, is_custom = false, url = cmd.url })
       end
     end
   end
@@ -57,7 +61,7 @@ function M.execute_command(cmd)
   persistence.save_last_command(root, cmd.name)
   terminal.run(cmd.command, root, function(output)
     persistence.save_output(cmd.name, output)
-  end, false, cmd.name)
+  end, false, cmd.name, { url = cmd.url })
 end
 
 local function show_picker()

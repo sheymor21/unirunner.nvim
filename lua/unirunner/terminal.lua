@@ -109,7 +109,9 @@ function M.cancel_task(task_id)
   return false
 end
 
-function M.run(command, root, on_output, is_cancel, command_name)
+function M.run(command, root, on_output, is_cancel, command_name, opts)
+  opts = opts or {}
+  
   -- Check if any process is already running
   local running_count = 0
   for _ in pairs(running_tasks) do
@@ -127,7 +129,12 @@ function M.run(command, root, on_output, is_cancel, command_name)
   
   local task_id = record_task_start(command_name or command, command)
   
-  runner_viewer.open(task_id)
+  -- Store known URL from launchSettings to avoid detecting it from output
+  if running_tasks[task_id] and opts.url then
+    running_tasks[task_id].known_url = opts.url
+  end
+  
+  runner_viewer.open(task_id, { known_url = opts.url })
   
   M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
   

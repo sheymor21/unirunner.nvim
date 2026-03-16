@@ -225,7 +225,8 @@ function M.open(task_id, opts)
   state.task_id = task_id
   state.is_running = true
   state.output_lines = {}
-  state.detected_ports = {}
+  -- Initialize with known URL from launchSettings to avoid detecting it from output
+  state.detected_ports = opts.known_url and { opts.known_url } or {}
   state.start_time = os.clock()
   
   -- Setup highlights
@@ -314,7 +315,10 @@ function M.on_task_output(task_id, output_line)
   local ports = utils.detect_ports(output_line)
   if #ports > 0 then
     for _, port in ipairs(ports) do
-      table.insert(state.detected_ports, port)
+      -- Avoid duplicates
+      if not vim.tbl_contains(state.detected_ports, port) then
+        table.insert(state.detected_ports, port)
+      end
     end
   end
   

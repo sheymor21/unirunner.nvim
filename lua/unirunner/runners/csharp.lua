@@ -97,6 +97,7 @@ function M.get_commands(root)
           command = cmd_str,
           project = project_name,
           profile = profile.name,
+          url = profile.url,
         })
       end
     end
