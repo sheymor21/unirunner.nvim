@@ -85,9 +85,9 @@ function M.render()
     
     -- Check if entry is currently running
     local terminal = require('unirunner.terminal')
-    local is_live = terminal.is_task_running(entry.id)
-    local status_display = is_live and 'LIVE' or status.icon
-    local status_hl = is_live and 'DiagnosticWarn' or status.hl
+    local is_running = terminal.is_task_running(entry.id)
+    local status_display = is_running and (entry.status == 'live' and '🟢 LIVE' or '🔨 BUILDING') or status.icon
+    local status_hl = is_running and (entry.status == 'live' and 'DiagnosticOk' or 'DiagnosticWarn') or status.hl
     
     local line = string.format('%-6s %-20s %10s %12s %8s',
       pin_icon, entry.command:sub(1, 20),
@@ -227,7 +227,7 @@ function M.open_output()
   if not entry then return end
   
   local terminal = require('unirunner.terminal')
-  local is_live = terminal.is_task_running(entry.id)
+  local is_running = terminal.is_task_running(entry.id)
   
   -- Open without preview flag to enter the output view
   history_viewer.open(entry, { preview = false })

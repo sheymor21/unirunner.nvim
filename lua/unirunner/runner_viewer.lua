@@ -94,8 +94,10 @@ local function render_header()
     return lines, highlights
   end
   
-  local status_icon = state.is_running and '⏵' or utils.get_status_icon(entry.status)
-  local status_badge = state.is_running and ' LIVE ' or utils.get_status_badge(entry.status)
+  -- Show LIVE only when server is confirmed ready from output, not just when we have a known URL
+  local is_live = state.server_ready and #state.detected_ports > 0
+  local status_icon = state.is_running and (is_live and '🟢' or '🔨') or utils.get_status_icon(entry.status)
+  local status_badge = state.is_running and (is_live and '🟢 LIVE' or '🔨 BUILDING') or utils.get_status_badge(entry.status)
   local duration = state.is_running and utils.format_duration(os.clock() - state.start_time) or utils.format_duration(entry.duration)
   local time_str = utils.format_timestamp(entry.timestamp)
   
@@ -228,6 +230,8 @@ function M.open(task_id, opts)
   -- Initialize with known URL from launchSettings to avoid detecting it from output
   state.detected_ports = opts.known_url and { opts.known_url } or {}
   state.start_time = os.clock()
+  -- Track whether we've confirmed the server is actually ready
+  state.server_ready = false
   
   -- Setup highlights
   utils.setup_output_highlights()
@@ -311,14 +315,27 @@ function M.on_task_output(task_id, output_line)
   
   table.insert(state.output_lines, output_line)
   
-  -- Detect ports
+  -- Detect ports from actual output (not pre-populated known URL)
   local ports = utils.detect_ports(output_line)
   if #ports > 0 then
+    local had_ports = #state.detected_ports > 0
+    local added_new_port = false
     for _, port in ipairs(ports) do
       -- Avoid duplicates
       if not vim.tbl_contains(state.detected_ports, port) then
         table.insert(state.detected_ports, port)
+        added_new_port = true
       end
+    end
+    
+    -- Mark server as ready when ports are detected from actual output
+    -- This works even if we already have known ports from launchSettings
+    if not state.server_ready then
+      state.server_ready = true
+      persistence.update_entry_status(task_id, { status = 'live' })
+      -- Update panel to refresh history
+      local panel = require('unirunner.panel')
+      panel.on_history_update()
     end
   end
   

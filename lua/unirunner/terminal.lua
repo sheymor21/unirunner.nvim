@@ -13,6 +13,42 @@ local running_tasks = {}
 -- TASK MANAGEMENT
 -- ============================================================================
 
+-- ============================================================================
+-- SERVER READY DETECTION
+-- ============================================================================
+
+-- Patterns that indicate the server is ready to accept requests
+local ready_patterns = {
+  'Now listening on:',
+  'Application started',
+  'Ready',
+  'Server started',
+  'Listening on',
+  'Press Ctrl%+C to shut down',  -- .NET specific
+}
+
+-- Check if output indicates the server is ready
+local function is_server_ready(output_line)
+  for _, pattern in ipairs(ready_patterns) do
+    if output_line:match(pattern) then
+      return true
+    end
+  end
+  return false
+end
+
+-- Transition task from building to live status
+local function transition_to_live(task_id)
+  local entry = running_tasks[task_id]
+  if not entry or entry.status ~= 'building' then return end
+  
+  entry.status = 'live'
+  persistence.update_entry_status(task_id, { status = 'live' })
+  
+  local panel = require('unirunner.panel')
+  panel.on_history_update()
+end
+
 local function generate_task_id()
   return string.format('%s-%s', os.time(), math.random(1000, 9999))
 end
@@ -23,7 +59,7 @@ local function record_task_start(command_name, full_command)
     id = task_id,
     command = command_name,
     full_command = full_command,
-    status = 'running',
+    status = 'building',
     timestamp = os.date('%Y-%m-%dT%H:%M:%SZ'),
     start_time = os.clock(),
     duration = nil,
@@ -157,6 +193,10 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
           if line ~= '' then
             table.insert(output_lines, line)
             runner_viewer.on_task_output(task_id, line)
+            -- Check if server is ready and transition status
+            if is_server_ready(line) then
+              transition_to_live(task_id)
+            end
           end
         end
         local output = table.concat(output_lines, '\n')
@@ -171,6 +211,10 @@ function M.run_in_output_viewer(command, cwd, task_id, on_output, delay)
           if line ~= '' then
             table.insert(output_lines, line)
             runner_viewer.on_task_output(task_id, line)
+            -- Check if server is ready and transition status
+            if is_server_ready(line) then
+              transition_to_live(task_id)
+            end
           end
         end
         local output = table.concat(output_lines, '\n')

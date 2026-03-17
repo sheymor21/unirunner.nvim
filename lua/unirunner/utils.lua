@@ -84,6 +84,8 @@ end
 
 ---Status display configuration
 local status_config = {
+  building = { icon = '🔨', text = 'BUILDING', hl = 'DiagnosticWarn', fg = '#ffaa00' },
+  live = { icon = '🟢', text = 'LIVE', hl = 'DiagnosticOk', fg = '#00ff88' },
   running = { icon = '▶', text = 'RUNNING', hl = 'DiagnosticInfo', fg = '#00d4ff' },
   success = { icon = '✓', text = 'SUCCESS', hl = 'DiagnosticOk', fg = '#00ff88' },
   failed = { icon = '✗', text = 'FAILED', hl = 'DiagnosticError', fg = '#ff3366' },
@@ -124,7 +126,9 @@ end
 ---@return string Status badge
 function M.get_status_badge(status)
   local badges = {
-    running = '● LIVE',
+    building = '🔨 BUILDING',
+    live = '🟢 LIVE',
+    running = '▶ RUNNING',
     success = '✓ SUCCESS',
     failed = '✗ FAILED',
     cancelled = '■ CANCELLED',
