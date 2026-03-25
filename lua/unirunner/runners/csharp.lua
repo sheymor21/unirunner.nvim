@@ -140,4 +140,67 @@ function M.get_available_projects()
   return M.available_projects or {}
 end
 
+---Get the URL from launchSettings.json for a .NET project
+---@param root string Project root directory
+---@param project_name string|nil Optional project name to get URL for specific project
+---@param profile_name string|nil Optional profile name (e.g., 'http', 'https') to get URL for specific profile
+---@return string|nil url The application URL if found
+---@return string|nil error Error message if URL not found
+---@return table|nil all_urls Table of all available URLs with project and profile info if no specific project/profile provided
+function M.get_launch_settings_url(root, project_name, profile_name)
+  if not root or root == '' then
+    return nil, 'No project root directory provided', nil
+  end
+  
+  local launch_files = find_launch_settings(root)
+  
+  if #launch_files == 0 then
+    return nil, 'No launchSettings.json found in project', nil
+  end
+  
+  local all_urls = {}
+  
+  for _, file_path in ipairs(launch_files) do
+    local current_project_name = get_project_name_from_path(file_path)
+    local profiles = parse_launch_settings(file_path)
+    
+    for _, profile in ipairs(profiles) do
+      if profile.url and profile.url ~= '' then
+        -- If multiple URLs are separated by semicolons, split them
+        for url in profile.url:gmatch('([^;]+)') do
+          table.insert(all_urls, {
+            project = current_project_name,
+            profile = profile.name,
+            url = url:match('^%s*(.-)%s*$') -- trim whitespace
+          })
+        end
+      end
+    end
+  end
+  
+  if #all_urls == 0 then
+    return nil, 'No applicationUrl found in any launch profile', nil
+  end
+  
+  -- If specific project and/or profile requested, find matching URL
+  if project_name or profile_name then
+    for _, entry in ipairs(all_urls) do
+      local project_match = not project_name or entry.project == project_name
+      local profile_match = not profile_name or entry.profile == profile_name
+      
+      if project_match and profile_match then
+        return entry.url, nil, all_urls
+      end
+    end
+    
+    local requested = {}
+    if project_name then table.insert(requested, 'project=' .. project_name) end
+    if profile_name then table.insert(requested, 'profile=' .. profile_name) end
+    return nil, 'No URL found for ' .. table.concat(requested, ', '), all_urls
+  end
+  
+  -- Return first URL by default, plus all available URLs
+  return all_urls[1].url, nil, all_urls
+end
+
 return M
