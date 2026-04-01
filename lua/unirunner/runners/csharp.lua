@@ -2,6 +2,7 @@ local M = {}
 
 function M.detect(root)
   return vim.fn.glob(root .. '/*.sln', false, true)[1] ~= nil
+      or vim.fn.glob(root .. '/*.slnx', false, true)[1] ~= nil
       or vim.fn.glob(root .. '/**/*.csproj', false, true)[1] ~= nil
       or vim.fn.glob(root .. '/**/*.fsproj', false, true)[1] ~= nil
 end
@@ -44,6 +45,7 @@ end
 function M.get_commands(root)
   local commands = {}
   local has_sln = vim.fn.glob(root .. '/*.sln', false, true)[1] ~= nil
+      or vim.fn.glob(root .. '/*.slnx', false, true)[1] ~= nil
   
   -- Find all launchSettings.json files
   local launch_files = find_launch_settings(root)
