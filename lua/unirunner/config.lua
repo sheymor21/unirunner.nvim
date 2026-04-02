@@ -14,6 +14,8 @@ local defaults = {
   close_delay = 2000,
   -- Delay in milliseconds before closing terminal after cancel (0 to disable)
   cancel_close_delay = 100,
+  -- Auto-kill running process when starting a new run
+  kill_on_new_run = true,
   
   -- Panel configuration
   panel = {

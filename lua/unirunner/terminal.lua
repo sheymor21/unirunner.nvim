@@ -155,8 +155,16 @@ function M.run(command, root, on_output, is_cancel, command_name, opts)
   end
   
   if running_count > 0 then
-    vim.notify('UniRunner: A process is already running. Cancel it first with :UniRunnerCancel', vim.log.levels.WARN)
-    return nil
+    local cfg = config.get()
+    if cfg.kill_on_new_run then
+      -- Cancel all running tasks
+      for task_id in pairs(running_tasks) do
+        M.cancel_task(task_id)
+      end
+    else
+      vim.notify('UniRunner: A process is already running. Cancel it first with :UniRunnerCancel', vim.log.levels.WARN)
+      return nil
+    end
   end
   
   local cfg = config.get()
