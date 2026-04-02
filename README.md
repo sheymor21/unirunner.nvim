@@ -14,7 +14,7 @@ A universal project runner plugin for Neovim with automatic project detection, r
 - **Custom commands** - Create project-specific custom run commands
 - **Terminal management** - Jump to terminals, cancel running processes
 - **Easy extensibility** - Simple API to add support for new languages
-- **Colemak-friendly keymaps** - Default keymaps support Colemak layout
+- **Toggleterm integration** - Uses toggleterm.nvim when available, falls back to native terminal
 - **No external dependencies** - Pure Neovim Lua
 
 ## Installation
@@ -56,6 +56,7 @@ use {
 | `:UniRunnerPanel` or `:UniRunnerHistory` | Toggle history panel |
 | `:UniRunnerPanelOpen` | Open history panel |
 | `:UniRunnerPanelClose` | Close history panel |
+| `:UniRunnerClearHistory` | Clear all command history |
 
 ### Workflow
 
@@ -70,7 +71,7 @@ use {
 
 The history panel provides a rich interface for managing your command history:
 
-- **Navigation**: Use `j/k` (or `n/e` for Colemak) to navigate entries
+- **Navigation**: Use `j/k` to navigate entries
 - **Preview**: Automatically previews output as you navigate
 - **View**: Press `Enter` to open the full output view
 - **Pin**: Press `p` to pin important entries
@@ -96,6 +97,9 @@ Create project-specific commands by running `:UniRunnerConfig` or manually creat
 
 ```lua
 require('unirunner').setup({
+  -- Terminal type: 'toggleterm' (uses toggleterm.nvim) or 'native' (builtin terminal)
+  terminal = 'toggleterm',
+
   -- Persist last command across sessions
   persist = true,
 
@@ -116,18 +120,27 @@ require('unirunner').setup({
   -- Delay in milliseconds before closing runner after cancel (0 to disable auto-close)
   cancel_close_delay = 100,
 
+  -- Auto-kill running process when starting a new run
+  kill_on_new_run = true,
+
   -- Panel configuration
   panel = {
     -- Default panel height
     height = 15,
+    -- Maximum number of history entries to keep
+    max_history = 5,
+    -- Show line numbers in history panel
+    show_line_numbers = false,
     -- Auto-follow output (scroll to bottom)
     auto_follow = true,
-    -- Keymaps (Colemak-friendly defaults)
+    -- Split ratio for output viewer (0.2 = 20% for history panel)
+    split_ratio = 0.2,
+    -- Keymaps (QWERTY by default)
     keymaps = {
-      down = 'n',           -- Move down (Colemak: n)
-      up = 'e',             -- Move up (Colemak: e)
-      scroll_down = 'n',    -- Scroll output down
-      scroll_up = 'e',      -- Scroll output up
+      down = 'j',           -- Move down
+      up = 'k',             -- Move up
+      scroll_down = 'j',    -- Scroll output down
+      scroll_up = 'k',      -- Scroll output up
       view_output = '<CR>', -- View full output
       pin = 'p',            -- Pin/unpin entry
       delete = 'd',         -- Delete entry
@@ -172,6 +185,7 @@ vim.keymap.set('n', '<leader>rh', '<cmd>UniRunnerPanel<cr>', { desc = 'Toggle hi
 - Detects: `*.sln`, `*.csproj`, `*.fsproj`
 - Commands: From `launchSettings.json` profiles (e.g., `ProjectName:http`, `ProjectName:https`)
 - Solution commands: `build`, `restore`, `test`, `clean`, `pack`
+- URL detection: Automatically extracts application URLs from launch profiles
 
 ### Lua
 - Detects: `.luarocks/`, `*.rockspec`, `main.lua`, `init.lua`
@@ -259,6 +273,79 @@ runners.register('python', python)
 - **Global persistence**: `~/.local/share/nvim/unirunner/history.json`
 - **Per-project config**: `.unirunner.json` in project root
 - **Rich history**: Persistent with pinning and status tracking
+
+## Terminal Integration
+
+The plugin supports two terminal backends:
+
+- **`toggleterm`** (default) - Uses [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) for better terminal management
+- **`native`** - Uses Neovim's built-in terminal
+
+To use the native terminal:
+
+```lua
+require('unirunner').setup({
+  terminal = 'native',
+})
+```
+
+## Colemak Support
+
+To use Colemak-friendly keymaps, configure the panel keymaps in your setup:
+
+```lua
+require('unirunner').setup({
+  panel = {
+    keymaps = {
+      down = 'n',           -- Colemak: n is down
+      up = 'e',             -- Colemak: e is up
+      scroll_down = 'n',    -- Scroll output down
+      scroll_up = 'e',      -- Scroll output up
+      view_output = '<CR>',
+      pin = 'p',
+      delete = 'd',
+      clear_all = 'D',
+      rerun = 'r',
+      cancel = 'c',
+      restart = 'R',
+      follow = 'r',
+      close = 'q',
+    },
+  },
+})
+```
+
+## Lua API
+
+The plugin exposes a Lua API for programmatic access:
+
+```lua
+local unirunner = require('unirunner')
+
+-- Run last command or show picker
+unirunner.run()
+
+-- Always show command picker
+unirunner.run_select()
+
+-- Run the last command
+unirunner.run_last()
+
+-- Open project configuration
+unirunner.open_config()
+
+-- Jump to terminal window
+unirunner.goto_terminal()
+
+-- Cancel running process
+unirunner.cancel()
+
+-- Toggle history panel
+unirunner.toggle_panel()
+
+-- Check if unirunner is active for current project
+local is_active = unirunner.is_active()
+```
 
 ## Requirements
 
