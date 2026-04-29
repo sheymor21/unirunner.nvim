@@ -14,7 +14,7 @@ A universal project runner plugin for Neovim with automatic project detection, r
 - **Custom commands** - Create project-specific custom run commands
 - **Terminal management** - Jump to terminals, cancel running processes
 - **Easy extensibility** - Simple API to add support for new languages
-- **Toggleterm integration** - Uses toggleterm.nvim when available, falls back to native terminal
+- **Native terminal** - Uses Neovim's built-in job control
 - **No external dependencies** - Pure Neovim Lua
 
 ## Installation
@@ -97,9 +97,6 @@ Create project-specific commands by running `:UniRunnerConfig` or manually creat
 
 ```lua
 require('unirunner').setup({
-  -- Terminal type: 'toggleterm' (uses toggleterm.nvim) or 'native' (builtin terminal)
-  terminal = 'toggleterm',
-
   -- Persist last command across sessions
   persist = true,
 
@@ -273,21 +270,6 @@ runners.register('python', python)
 - **Global persistence**: `~/.local/share/nvim/unirunner/history.json`
 - **Per-project config**: `.unirunner.json` in project root
 - **Rich history**: Persistent with pinning and status tracking
-
-## Terminal Integration
-
-The plugin supports two terminal backends:
-
-- **`toggleterm`** (default) - Uses [toggleterm.nvim](https://github.com/akinsho/toggleterm.nvim) for better terminal management
-- **`native`** - Uses Neovim's built-in terminal
-
-To use the native terminal:
-
-```lua
-require('unirunner').setup({
-  terminal = 'native',
-})
-```
 
 ## Colemak Support
 

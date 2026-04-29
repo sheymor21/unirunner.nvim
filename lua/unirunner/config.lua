@@ -1,7 +1,7 @@
 local M = {}
 
 local defaults = {
-  terminal = 'toggleterm',
+  terminal = 'native', -- Terminal backend (native only, snacks removed)
   persist = true,
   working_dir = 'root',
   root_markers = {
