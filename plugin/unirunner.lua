@@ -47,3 +47,11 @@ end, { desc = 'Open command history panel' })
 vim.api.nvim_create_user_command('UniRunnerPanelClose', function()
   require('unirunner').close_panel()
 end, { desc = 'Close command history panel' })
+
+vim.api.nvim_create_user_command('UniRunnerOpenUrl', function()
+  require('unirunner').open_url()
+end, { desc = 'Open URL in browser' })
+
+vim.api.nvim_create_user_command('UniRunnerSelectUrl', function()
+  require('unirunner').open_url_select()
+end, { desc = 'Select and open URL in browser' })
