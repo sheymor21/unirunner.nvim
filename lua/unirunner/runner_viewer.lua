@@ -14,6 +14,7 @@ local state = {
   output_lines = {},
   detected_ports = {},
   start_time = nil,
+  known_url = nil,
 }
 
 -- Animation timer
@@ -228,7 +229,13 @@ function M.open(task_id, opts)
   state.is_running = true
   state.output_lines = {}
   -- Initialize with known URL from launchSettings to avoid detecting it from output
-  state.detected_ports = opts.known_url and { opts.known_url } or {}
+  state.detected_ports = {}
+  if opts.known_url then
+    for url in opts.known_url:gmatch('([^;]+)') do
+      table.insert(state.detected_ports, url:match('^%s*(.-)%s*$'))
+    end
+  end
+  state.known_url = opts.known_url
   state.start_time = os.clock()
   -- Track whether we've confirmed the server is actually ready
   state.server_ready = false
@@ -273,6 +280,7 @@ function M.close()
   state.win = nil
   state.is_open = false
   state.is_running = false
+  state.known_url = nil
 end
 
 function M.focus()
@@ -318,18 +326,17 @@ function M.on_task_output(task_id, output_line)
   -- Detect ports from actual output (not pre-populated known URL)
   local ports = utils.detect_ports(output_line)
   if #ports > 0 then
-    local had_ports = #state.detected_ports > 0
-    local added_new_port = false
-    for _, port in ipairs(ports) do
-      -- Avoid duplicates
-      if not vim.tbl_contains(state.detected_ports, port) then
-        table.insert(state.detected_ports, port)
-        added_new_port = true
+    -- Only add ports from logs when no known URL from launchSettings is present
+    if not state.known_url then
+      for _, port in ipairs(ports) do
+        -- Avoid duplicates
+        if not vim.tbl_contains(state.detected_ports, port) then
+          table.insert(state.detected_ports, port)
+        end
       end
     end
-    
+
     -- Mark server as ready when ports are detected from actual output
-    -- This works even if we already have known ports from launchSettings
     if not state.server_ready then
       state.server_ready = true
       persistence.update_entry_status(task_id, { status = 'live' })
