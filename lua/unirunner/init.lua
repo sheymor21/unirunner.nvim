@@ -36,7 +36,7 @@ function M.get_all_commands(root)
         if cmd.url then
           display = display .. ' [' .. cmd.url .. ']'
         end
-        table.insert(commands, { name = cmd.name, command = cmd.command, display = display, is_custom = false, url = cmd.url })
+        table.insert(commands, { name = cmd.name, command = cmd.command, display = display, is_custom = false, url = cmd.url, launch_url = cmd.launch_url })
       end
     end
   end
@@ -205,6 +205,127 @@ end
 function M.is_active()
   local root = detector.find_root()
   return root ~= nil and select(2, runners.detect_runner(root)) ~= nil
+end
+
+---Combine a base URL with a launchUrl path
+---@param base string Base URL (e.g. http://localhost:5000)
+---@param path string|nil launchUrl path (e.g. swagger)
+---@return string Combined URL
+local function combine_url(base, path)
+  if not path or path == '' then
+    return base
+  end
+  if path:match('^https?://') then
+    return path
+  end
+  base = base:gsub('/$', '')
+  path = path:gsub('^/', '')
+  return base .. '/' .. path
+end
+
+---Open a URL in the system default browser
+---@param url string URL to open
+local function open_url_in_browser(url)
+  if vim.ui.open then
+    local ok = pcall(vim.ui.open, url)
+    if ok then return end
+  end
+
+  if vim.fn.has('win32') == 1 or vim.fn.has('win64') == 1 then
+    vim.fn.jobstart('start "" ' .. vim.fn.shellescape(url), { detach = true })
+  elseif vim.fn.has('mac') == 1 then
+    vim.fn.jobstart({ 'open', url }, { detach = true })
+  else
+    vim.fn.jobstart({ 'xdg-open', url }, { detach = true })
+  end
+end
+
+function M.open_url(opts)
+  opts = opts or {}
+
+  local root = current_root or detector.find_root()
+  if not root then
+    vim.notify('UniRunner: No project root found', vim.log.levels.ERROR)
+    return
+  end
+
+  -- Only allow opening URLs when a runner is actually running
+  local running_tasks = terminal.get_running_tasks()
+  if not next(running_tasks) then
+    vim.notify('UniRunner: No runner is currently active', vim.log.levels.WARN)
+    return
+  end
+
+  -- Check if we have a saved URL and user isn't forcing re-selection
+  if not opts.force_select then
+    local local_config = persistence.load_local_config(root)
+    if local_config and local_config.selected_url then
+      open_url_in_browser(local_config.selected_url)
+      return
+    end
+  end
+
+  -- Collect all available URLs
+  local all_urls = {}
+  local url_sources = {}
+
+  -- 1. From running tasks
+  local running = terminal.get_running_urls()
+  for _, task in ipairs(running) do
+    -- Find the original command to get launch_url
+    local task_launch_url = nil
+    for _, cmd in ipairs(M.get_all_commands(root)) do
+      if cmd.name == task.command then
+        task_launch_url = cmd.launch_url
+        break
+      end
+    end
+
+    for _, url in ipairs(task.urls) do
+      local open_url = combine_url(url, task_launch_url)
+      if not vim.tbl_contains(all_urls, open_url) then
+        table.insert(all_urls, open_url)
+        url_sources[open_url] = 'Running: ' .. task.command
+      end
+    end
+  end
+
+  if #all_urls == 0 then
+    vim.notify('UniRunner: No URLs found for this project', vim.log.levels.WARN)
+    return
+  end
+
+  if #all_urls == 1 then
+    local chosen = all_urls[1]
+    local local_config = persistence.load_local_config(root) or {}
+    local_config.selected_url = chosen
+    persistence.save_local_config(root, local_config)
+    open_url_in_browser(chosen)
+    return
+  end
+
+  -- Multiple URLs: show picker
+  local options = {}
+  for _, url in ipairs(all_urls) do
+    local label = url
+    if url_sources[url] then
+      label = url .. '  (' .. url_sources[url] .. ')'
+    end
+    table.insert(options, label)
+  end
+
+  vim.ui.select(options, { prompt = 'Select URL to open:' }, function(choice, idx)
+    if not choice or not idx then return end
+    local chosen = all_urls[idx]
+    local local_config = persistence.load_local_config(root) or {}
+    local_config.selected_url = chosen
+    persistence.save_local_config(root, local_config)
+    open_url_in_browser(chosen)
+  end)
+end
+
+function M.open_url_select()
+  M.open_url({ force_select = true })
 end
 
 -- Legacy history functions (for backward compatibility)

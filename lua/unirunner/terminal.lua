@@ -109,6 +109,40 @@ function M.is_task_running(task_id)
   return running_tasks[task_id] ~= nil
 end
 
+function M.get_running_urls()
+  local result = {}
+  for task_id, entry in pairs(running_tasks) do
+    local urls = {}
+
+    -- Get URLs from runner_viewer (includes known_url + detected from output)
+    local detected = runner_viewer.get_detected_urls(task_id)
+    for _, url in ipairs(detected) do
+      if not vim.tbl_contains(urls, url) then
+        table.insert(urls, url)
+      end
+    end
+
+    -- Also check known_url directly as fallback
+    if entry.known_url and #urls == 0 then
+      for raw_url in entry.known_url:gmatch('([^;]+)') do
+        local url = raw_url:match('^%s*(.-)%s*$')
+        if not vim.tbl_contains(urls, url) then
+          table.insert(urls, url)
+        end
+      end
+    end
+
+    if #urls > 0 then
+      table.insert(result, {
+        task_id = task_id,
+        command = entry.command,
+        urls = urls,
+      })
+    end
+  end
+  return result
+end
+
 function M.cancel_task(task_id)
   local entry = running_tasks[task_id]
   if not entry then return false end

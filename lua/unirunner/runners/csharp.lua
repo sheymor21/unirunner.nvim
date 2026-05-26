@@ -29,6 +29,7 @@ local function parse_launch_settings(file_path)
       args = profile.commandLineArgs,
       env = profile.environmentVariables,
       url = profile.applicationUrl,
+      launch_url = profile.launchUrl,
     })
   end
   
@@ -100,6 +101,7 @@ function M.get_commands(root)
           project = project_name,
           profile = profile.name,
           url = profile.url,
+          launch_url = profile.launch_url,
         })
       end
     end

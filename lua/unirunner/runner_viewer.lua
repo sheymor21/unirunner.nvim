@@ -372,4 +372,9 @@ function M.get_task_id() return state.task_id end
 function M.get_output() return table.concat(state.output_lines, '\n') end
 function M.get_window() return state.win end
 
+function M.get_detected_urls(task_id)
+  if state.task_id ~= task_id then return {} end
+  return vim.deepcopy(state.detected_ports)
+end
+
 return M
