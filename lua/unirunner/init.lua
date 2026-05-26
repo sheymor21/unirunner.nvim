@@ -156,9 +156,14 @@ function M.open_config()
   
   local config_file = current_root .. '/.unirunner.json'
   if vim.fn.filereadable(config_file) == 0 then
-    persistence.save_local_config(current_root, { custom_commands = {}, default_command = nil })
+    ui.select_config_template(function(config_data)
+      if not config_data then return end
+      persistence.save_local_config(current_root, config_data)
+      vim.cmd('edit ' .. config_file)
+    end)
+  else
+    vim.cmd('edit ' .. config_file)
   end
-  vim.cmd('edit ' .. config_file)
 end
 
 function M.goto_terminal()

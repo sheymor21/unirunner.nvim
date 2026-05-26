@@ -77,6 +77,47 @@ local function prompt_manual(callback, default_name, default_command)
   end)
 end
 
+function M.select_config_template(callback)
+  local categories = { 'Empty', 'C#', 'Go', 'JavaScript/TypeScript' }
+
+  vim.ui.select(categories, {
+    prompt = 'Select config template:',
+  }, function(category)
+    if not category or category == 'Empty' then
+      callback({ custom_commands = {}, default_command = nil })
+      return
+    end
+
+    local custom_commands = {}
+    local default_command = nil
+
+    if category == 'JavaScript/TypeScript' then
+      vim.ui.select(js_managers, {
+        prompt = 'Select package manager:',
+      }, function(manager)
+        if not manager then
+          callback({ custom_commands = {}, default_command = nil })
+          return
+        end
+
+        for _, tmpl in ipairs(js_templates) do
+          custom_commands[tmpl.name] = manager .. ' ' .. tmpl.command
+        end
+        default_command = js_templates[1].name
+
+        callback({ custom_commands = custom_commands, default_command = default_command })
+      end)
+    else
+      for _, tmpl in ipairs(templates[category]) do
+        custom_commands[tmpl.name] = tmpl.command
+      end
+      default_command = templates[category][1].name
+
+      callback({ custom_commands = custom_commands, default_command = default_command })
+    end
+  end)
+end
+
 function M.input_custom_command(callback)
   local categories = { 'Custom', 'C#', 'Go', 'JavaScript/TypeScript' }
 
