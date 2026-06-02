@@ -83,37 +83,67 @@ function M.select_config_template(callback)
   vim.ui.select(categories, {
     prompt = 'Select config template:',
   }, function(category)
-    if not category or category == 'Empty' then
+    if not category then
+      callback(nil)
+      return
+    end
+
+    if category == 'Empty' then
       callback({ custom_commands = {}, default_command = nil })
       return
     end
 
-    local custom_commands = {}
-    local default_command = nil
+    local function on_picked(name, command)
+      callback({
+        custom_commands = { [name] = command },
+        default_command = name,
+      })
+    end
+
+    local function choose_from(items, prefix)
+      local options = {}
+      for _, tmpl in ipairs(items) do
+        local full_cmd = prefix and (prefix .. ' ' .. tmpl.command) or tmpl.command
+        table.insert(options, {
+          display = tmpl.name .. '  (' .. full_cmd .. ')',
+          name = tmpl.name,
+          command = full_cmd,
+        })
+      end
+      table.insert(options, { display = '+ Custom', name = '__custom__', command = '' })
+
+      vim.ui.select(options, {
+        prompt = 'Select command to add:',
+        format_item = function(item)
+          return item.display
+        end,
+      }, function(selected)
+        if not selected then
+          callback(nil)
+          return
+        end
+        if selected.name == '__custom__' then
+          prompt_manual(function(result)
+            on_picked(result.name, result.command)
+          end)
+        else
+          on_picked(selected.name, selected.command)
+        end
+      end)
+    end
 
     if category == 'JavaScript/TypeScript' then
       vim.ui.select(js_managers, {
         prompt = 'Select package manager:',
       }, function(manager)
         if not manager then
-          callback({ custom_commands = {}, default_command = nil })
+          callback(nil)
           return
         end
-
-        for _, tmpl in ipairs(js_templates) do
-          custom_commands[tmpl.name] = manager .. ' ' .. tmpl.command
-        end
-        default_command = js_templates[1].name
-
-        callback({ custom_commands = custom_commands, default_command = default_command })
+        choose_from(js_templates, manager)
       end)
     else
-      for _, tmpl in ipairs(templates[category]) do
-        custom_commands[tmpl.name] = tmpl.command
-      end
-      default_command = templates[category][1].name
-
-      callback({ custom_commands = custom_commands, default_command = default_command })
+      choose_from(templates[category])
     end
   end)
 end
