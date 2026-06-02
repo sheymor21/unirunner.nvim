@@ -82,7 +82,7 @@ local function show_picker()
           local_config.custom_commands = local_config.custom_commands or {}
           local_config.custom_commands[custom_cmd.name] = custom_cmd.command
           persistence.save_local_config(current_root, local_config)
-          M.execute_command(custom_cmd)
+          vim.notify('UniRunner: Created custom command "' .. custom_cmd.name .. '"', vim.log.levels.INFO)
         end
       end)
     else
