@@ -27,6 +27,7 @@ local templates = {
     { name = 'test', command = 'dotnet test' },
     { name = 'run', command = 'dotnet run' },
     { name = 'restore', command = 'dotnet restore' },
+    { name = 'publish', command = 'dotnet publish' },
     { name = 'clean', command = 'dotnet clean' },
     { name = 'pack', command = 'dotnet pack' },
   },
