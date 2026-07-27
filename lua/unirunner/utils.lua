@@ -306,6 +306,14 @@ function M.detect_ports(text)
       end
     end
   end
+
+  -- Also catch bare ports like ":8080" and treat as localhost
+  for port in text:gmatch('[^%w%.](%d%d%d%d+)') do
+    local url = 'http://localhost:' .. port
+    if not vim.tbl_contains(ports, url) then
+      table.insert(ports, url)
+    end
+  end
   
   return ports
 end

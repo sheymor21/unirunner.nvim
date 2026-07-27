@@ -22,7 +22,7 @@ local ready_patterns = {
 -- Check if output indicates the server is ready
 local function is_server_ready(output_line)
   for _, pattern in ipairs(ready_patterns) do
-    if output_line:match(pattern) then
+    if output_line:lower():match(pattern:lower()) then
       return true
     end
   end
