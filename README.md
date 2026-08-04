@@ -57,6 +57,8 @@ use {
 | `:UniRunnerPanelOpen` | Open history panel |
 | `:UniRunnerPanelClose` | Close history panel |
 | `:UniRunnerClearHistory` | Clear all command history |
+| `:UniRunnerOpenUrl` | Open the selected URL in the default browser |
+| `:UniRunnerSelectUrl` | Pick a URL and open it in the default browser |
 
 ### Workflow
 
@@ -126,12 +128,6 @@ require('unirunner').setup({
     height = 15,
     -- Maximum number of history entries to keep
     max_history = 5,
-    -- Show line numbers in history panel
-    show_line_numbers = false,
-    -- Auto-follow output (scroll to bottom)
-    auto_follow = true,
-    -- Split ratio for output viewer (0.2 = 20% for history panel)
-    split_ratio = 0.2,
     -- Keymaps (QWERTY by default)
     keymaps = {
       down = 'j',           -- Move down
@@ -164,6 +160,7 @@ vim.keymap.set('n', '<leader>rc', '<cmd>UniRunnerConfig<cr>', { desc = 'Edit pro
 vim.keymap.set('n', '<leader>rt', '<cmd>UniRunnerTerminal<cr>', { desc = 'Go to terminal' })
 vim.keymap.set('n', '<leader>rC', '<cmd>UniRunnerCancel<cr>', { desc = 'Cancel runner' })
 vim.keymap.set('n', '<leader>rh', '<cmd>UniRunnerPanel<cr>', { desc = 'Toggle history panel' })
+vim.keymap.set('n', '<leader>ru', '<cmd>UniRunnerOpenUrl<cr>', { desc = 'Open runner URL' })
 ```
 
 ## Supported Languages
@@ -214,6 +211,9 @@ The plugin now features a rich history system:
 
 The plugin is built with a modular architecture:
 
+- **`root`** - Project-root detection and prompt-on-miss
+- **`picker`** - Command picker orchestration and execution
+- **`url`** - URL detection, combination, and browser launch
 - **`runner_viewer`** - Live runner terminal (bottom split, shows header only)
 - **`history_viewer`** - Output preview and full view (right split)
 - **`panel`** - History browser (left split)
