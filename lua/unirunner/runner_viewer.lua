@@ -15,10 +15,10 @@ local state = {
   detected_ports = {},
   start_time = nil,
   known_url = nil,
+  duration_timer = nil,
 }
 
--- Animation timer
-local animation_timer = nil
+local MAX_OUTPUT_LINES = 5000
 
 -- ============================================================================
 -- BUFFER & WINDOW SETUP
@@ -180,19 +180,36 @@ local function apply_highlights(highlights)
 end
 
 -- ============================================================================
--- ANIMATION TIMER
+-- DURATION TICKER (lightweight 1Hz update of the duration column only)
 -- ============================================================================
 
-local function start_animation_timer()
-  if animation_timer then return end
-  animation_timer = utils.create_refresh_timer(100, function()
-    return state.is_open and state.is_running
-  end, M.refresh)
+local function start_duration_timer()
+  if state.duration_timer then return end
+  state.duration_timer = vim.fn.timer_start(1000, function()
+    if not (state.is_open and state.is_running) then
+      M.stop_duration_timer()
+      return
+    end
+    -- Only re-render the header (line 1) instead of the whole buffer
+    if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
+      local lines, highlights = render_header()
+      vim.api.nvim_buf_set_option(state.buf, 'modifiable', true)
+      -- Re-render header plus output. Cheap because we only re-append known state.
+      local all = {}
+      for _, l in ipairs(lines) do table.insert(all, l) end
+      for _, l in ipairs(state.output_lines) do table.insert(all, l) end
+      vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, all)
+      vim.api.nvim_buf_set_option(state.buf, 'modifiable', false)
+      apply_highlights(highlights)
+    end
+  end, { ['repeat'] = -1 })
 end
 
-function M.stop_animation_timer()
-  utils.stop_timer(animation_timer)
-  animation_timer = nil
+function M.stop_duration_timer()
+  if state.duration_timer then
+    vim.fn.timer_stop(state.duration_timer)
+    state.duration_timer = nil
+  end
 end
 
 -- ============================================================================
@@ -263,14 +280,14 @@ function M.open(task_id, opts)
   -- Window options
   utils.setup_window_options(state.win, { winfixheight = true })
   vim.api.nvim_win_set_height(state.win, 3)
-  
+
   M.refresh()
-  start_animation_timer()
+  start_duration_timer()
 end
 
 function M.close()
-  M.stop_animation_timer()
-  
+  M.stop_duration_timer()
+
   if state.win and vim.api.nvim_win_is_valid(state.win) then
     vim.api.nvim_win_close(state.win, true)
   end
@@ -321,6 +338,14 @@ function M.on_task_output(task_id, output_line)
 
   table.insert(state.output_lines, output_line)
 
+  -- Cap the in-memory output to avoid unbounded growth on long-running tasks.
+  -- Drop the oldest 100 lines at a time to amortize the cost.
+  if #state.output_lines > MAX_OUTPUT_LINES then
+    for _ = 1, 100 do
+      table.remove(state.output_lines, 1)
+    end
+  end
+
   -- Detect ports from actual output (only used for display, not for status transition)
   local ports = utils.detect_ports(output_line)
   if #ports > 0 and not state.known_url then
@@ -340,10 +365,16 @@ function M.on_task_complete(task_id, status, output)
   if state.task_id ~= task_id then return end
 
   state.is_running = false
-  M.stop_animation_timer()
+  M.stop_duration_timer()
 
-  -- Update output lines from final output
-  state.output_lines = utils.split_output_to_lines(output)
+  -- Update output lines from final output (also capped to MAX_OUTPUT_LINES)
+  local lines = utils.split_output_to_lines(output)
+  if #lines > MAX_OUTPUT_LINES then
+    for _ = 1, #lines - MAX_OUTPUT_LINES do
+      table.remove(lines, 1)
+    end
+  end
+  state.output_lines = lines
 
   if state.is_open then
     M.refresh()

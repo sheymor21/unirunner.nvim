@@ -14,7 +14,19 @@ local state = {
   is_live_view = false,
   output_lines = {},
   parent_win = nil, -- Window to return to when closing
+  refresh_timer = nil,
+  last_seen_lines = 0,
 }
+
+local MAX_OUTPUT_LINES = 5000
+
+local function cap_output(lines)
+  if #lines > MAX_OUTPUT_LINES then
+    for _ = 1, #lines - MAX_OUTPUT_LINES do
+      table.remove(lines, 1)
+    end
+  end
+end
 
 -- ============================================================================
 -- BUFFER & WINDOW SETUP
@@ -212,15 +224,25 @@ function M.open(entry, opts)
 
   M.refresh()
 
-  -- Setup auto-refresh for live entries
+  -- Lightweight 1Hz sync for live entries. We poll `runner_viewer.get_output()`
+  -- cheaply and only re-render when the line count changes.
   if state.is_live_view then
-    state.refresh_timer = utils.create_refresh_timer(100, function()
+    state.last_seen_lines = 0
+    state.refresh_timer = utils.create_refresh_timer(1000, function()
       return state.is_open and state.is_live_view
     end, function()
-      -- Sync output from runner_viewer
-      if runner_viewer.is_running() and runner_viewer.get_task_id() == entry.id then
-        state.output_lines = utils.split_output_to_lines(runner_viewer.get_output())
+      if not (runner_viewer.is_running() and runner_viewer.get_task_id() == entry.id) then
+        return
       end
+      local output = runner_viewer.get_output()
+      local _, newline_count = output:gsub('\n', '')
+      local line_count = newline_count + (output:sub(-1) ~= '\n' and 1 or 0)
+      if line_count == state.last_seen_lines then
+        return  -- no new output
+      end
+      state.last_seen_lines = line_count
+      state.output_lines = utils.split_output_to_lines(output)
+      cap_output(state.output_lines)
       M.refresh()
     end)
   end

@@ -173,7 +173,7 @@ end
 ---Save JSON file
 ---@param filepath string Path to save
 ---@param data table Data to save
----@param cache table|nil Optional cache to invalidate
+---@param cache table|nil Optional cache to write through to
 ---@return boolean Success
 function M.save_json_file(filepath, data, cache)
   -- Ensure directory exists
@@ -181,13 +181,14 @@ function M.save_json_file(filepath, data, cache)
   if vim.fn.isdirectory(dir) == 0 then
     vim.fn.mkdir(dir, 'p')
   end
-  
+
   local ok, json_str = pcall(vim.json.encode, data)
   if ok then
     vim.fn.writefile(vim.split(json_str, '\n'), filepath)
-    -- Invalidate cache if provided
-    if cache then
-      cache[filepath] = nil
+    -- Write through to cache so subsequent reads stay coherent without a re-read.
+    -- Skip when data contains non-serializable values (e.g. userdata).
+    if cache and type(data) == 'table' then
+      cache[filepath] = data
     end
     return true
   end
