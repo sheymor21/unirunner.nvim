@@ -510,7 +510,6 @@ function M.show_output_history()
 end
 
 function M.clear_output_history()
-  persistence.clear_output_history()
   persistence.clear_rich_history()
   vim.notify('UniRunner: Output history cleared', vim.log.levels.INFO)
 end

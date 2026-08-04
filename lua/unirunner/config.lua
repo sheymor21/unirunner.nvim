@@ -23,10 +23,7 @@ local defaults = {
   panel = {
     height = 15,
     max_history = 5,
-    show_line_numbers = false,
-    auto_follow = true,
-    split_ratio = 0.2, -- For output viewer split view (20% for history panel)
-    
+
     -- Keymaps (QWERTY by default)
     keymaps = {
       down = 'j',           -- QWERTY: j is down

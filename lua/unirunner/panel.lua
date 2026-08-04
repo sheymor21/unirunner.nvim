@@ -333,7 +333,4 @@ function M.on_history_update()
   if state.is_open then M.refresh() end
 end
 
--- Expose state for output_viewer
-M.state = state
-
 return M

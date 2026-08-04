@@ -7,9 +7,8 @@ local data_path = vim.fn.stdpath('data') .. '/unirunner'
 local data_file = data_path .. '/projects.json'
 local history_file = data_path .. '/history.json'
 
--- In-memory caches
+-- In-memory file cache
 local file_cache = {}
-local output_history = {}
 local max_history = 5
 
 -- ============================================================================
@@ -60,31 +59,6 @@ function M.sort_history(history)
   vim.list_extend(result, pinned)
   vim.list_extend(result, unpinned)
   return result
-end
-
--- ============================================================================
--- LEGACY IN-MEMORY HISTORY (backward compatibility)
--- ============================================================================
-
-function M.save_output(command, output, is_cancelled)
-  table.insert(output_history, 1, {
-    command = command,
-    output = output,
-    timestamp = os.date('%Y-%m-%d %H:%M:%S'),
-    is_cancelled = is_cancelled or false,
-  })
-  
-  while #output_history > max_history do
-    table.remove(output_history)
-  end
-end
-
-function M.get_output_history()
-  return output_history
-end
-
-function M.clear_output_history()
-  output_history = {}
 end
 
 -- ============================================================================
@@ -158,16 +132,6 @@ function M.get_entry_by_id(entry_id)
     end
   end
   return nil
-end
-
-function M.get_running_entries()
-  local running = {}
-  for _, entry in ipairs(M.load_json_file(history_file)) do
-    if entry.status == 'running' then
-      table.insert(running, entry)
-    end
-  end
-  return running
 end
 
 -- ============================================================================

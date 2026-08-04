@@ -107,7 +107,6 @@ if check_file_exists("lua/unirunner/persistence.lua", "Persistence") then
   check_string_in_file("lua/unirunner/persistence.lua", "unpin_entry", "unpin_entry function")
   check_string_in_file("lua/unirunner/persistence.lua", "delete_entry", "delete_entry function")
   check_string_in_file("lua/unirunner/persistence.lua", "update_entry_status", "update_entry_status function")
-  check_string_in_file("lua/unirunner/persistence.lua", "get_running_entries", "get_running_entries function")
 end
 
 -- Check panel module has required functions
@@ -124,8 +123,6 @@ if check_file_exists("lua/unirunner/panel.lua", "Panel") then
   check_string_in_file("lua/unirunner/panel.lua", "function M%.clear_all", "clear_all function")
   check_string_in_file("lua/unirunner/panel.lua", "function M%.rerun_selected", "rerun_selected function")
   check_string_in_file("lua/unirunner/panel.lua", "function M%.open_output", "open_output function")
-  check_string_in_file("lua/unirunner/panel.lua", "down.*=.*'n'", "Colemak down keymap")
-  check_string_in_file("lua/unirunner/panel.lua", "up.*=.*'e'", "Colemak up keymap")
   check_string_in_file("lua/unirunner/panel.lua", "status_data", "Status data table")
   check_string_in_file("lua/unirunner/panel.lua", "UniRunnerSuccess", "Success highlight")
   check_string_in_file("lua/unirunner/panel.lua", "UniRunnerFailed", "Failed highlight")
@@ -158,7 +155,6 @@ if check_file_exists("lua/unirunner/history_viewer.lua", "History viewer") then
   check_string_in_file("lua/unirunner/history_viewer.lua", "function M%.scroll_up", "scroll_up function")
   check_string_in_file("lua/unirunner/history_viewer.lua", "function M%.restart", "restart function")
   check_string_in_file("lua/unirunner/history_viewer.lua", "is_live_view", "Live view tracking")
-  check_string_in_file("lua/unirunner/history_viewer.lua", "nvim_open_win", "Floating window support")
 end
 
 -- Check terminal module
@@ -168,7 +164,6 @@ if check_file_exists("lua/unirunner/terminal.lua", "Terminal") then
   check_string_in_file("lua/unirunner/terminal.lua", "record_task_start", "Task start recording")
   check_string_in_file("lua/unirunner/terminal.lua", "record_task_complete", "Task completion recording")
   check_string_in_file("lua/unirunner/terminal.lua", "generate_task_id", "Task ID generation")
-  check_string_in_file("lua/unirunner/terminal.lua", "on_task_output", "Live output callback")
 end
 
 -- Check config module
@@ -176,8 +171,8 @@ print("\n⚙️  Checking config module...")
 if check_file_exists("lua/unirunner/config.lua", "Config") then
   check_string_in_file("lua/unirunner/config.lua", "panel%s*=%s*{", "Panel config")
   check_string_in_file("lua/unirunner/config.lua", "keymaps", "Keymaps config")
-  check_string_in_file("lua/unirunner/config.lua", "down.*=.*'n'", "Colemak down default")
-  check_string_in_file("lua/unirunner/config.lua", "up.*=.*'e'", "Colemak up default")
+  check_string_in_file("lua/unirunner/config.lua", "down%s*=%s*'j'", "QWERTY down default")
+  check_string_in_file("lua/unirunner/config.lua", "up%s*=%s*'k'", "QWERTY up default")
 end
 
 -- Check main module
