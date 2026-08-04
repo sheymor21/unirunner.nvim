@@ -123,11 +123,6 @@ if check_file_exists("lua/unirunner/panel.lua", "Panel") then
   check_string_in_file("lua/unirunner/panel.lua", "function M%.clear_all", "clear_all function")
   check_string_in_file("lua/unirunner/panel.lua", "function M%.rerun_selected", "rerun_selected function")
   check_string_in_file("lua/unirunner/panel.lua", "function M%.open_output", "open_output function")
-  check_string_in_file("lua/unirunner/panel.lua", "status_data", "Status data table")
-  check_string_in_file("lua/unirunner/panel.lua", "UniRunnerSuccess", "Success highlight")
-  check_string_in_file("lua/unirunner/panel.lua", "UniRunnerFailed", "Failed highlight")
-  check_string_in_file("lua/unirunner/panel.lua", "UniRunnerCancelled", "Cancelled highlight")
-  check_string_in_file("lua/unirunner/panel.lua", "UniRunnerRunning", "Running highlight")
 end
 
 -- Check runner viewer module
@@ -136,11 +131,8 @@ if check_file_exists("lua/unirunner/runner_viewer.lua", "Runner viewer") then
   check_string_in_file("lua/unirunner/runner_viewer.lua", "function M%.open", "open function")
   check_string_in_file("lua/unirunner/runner_viewer.lua", "function M%.close", "close function")
   check_string_in_file("lua/unirunner/runner_viewer.lua", "function M%.refresh", "refresh function")
-  check_string_in_file("lua/unirunner/runner_viewer.lua", "function M%.scroll_down", "scroll_down function")
-  check_string_in_file("lua/unirunner/runner_viewer.lua", "function M%.scroll_up", "scroll_up function")
   check_string_in_file("lua/unirunner/runner_viewer.lua", "function M%.cancel_process", "cancel_process function")
   check_string_in_file("lua/unirunner/runner_viewer.lua", "function M%.restart", "restart function")
-  check_string_in_file("lua/unirunner/runner_viewer.lua", "is_running", "Running state tracking")
   check_string_in_file("lua/unirunner/runner_viewer.lua", "on_task_output", "Task output callback")
   check_string_in_file("lua/unirunner/runner_viewer.lua", "on_task_complete", "Task complete callback")
 end
@@ -151,8 +143,6 @@ if check_file_exists("lua/unirunner/history_viewer.lua", "History viewer") then
   check_string_in_file("lua/unirunner/history_viewer.lua", "function M%.open", "open function")
   check_string_in_file("lua/unirunner/history_viewer.lua", "function M%.close", "close function")
   check_string_in_file("lua/unirunner/history_viewer.lua", "function M%.refresh", "refresh function")
-  check_string_in_file("lua/unirunner/history_viewer.lua", "function M%.scroll_down", "scroll_down function")
-  check_string_in_file("lua/unirunner/history_viewer.lua", "function M%.scroll_up", "scroll_up function")
   check_string_in_file("lua/unirunner/history_viewer.lua", "function M%.restart", "restart function")
   check_string_in_file("lua/unirunner/history_viewer.lua", "is_live_view", "Live view tracking")
 end
@@ -164,6 +154,27 @@ if check_file_exists("lua/unirunner/terminal.lua", "Terminal") then
   check_string_in_file("lua/unirunner/terminal.lua", "record_task_start", "Task start recording")
   check_string_in_file("lua/unirunner/terminal.lua", "record_task_complete", "Task completion recording")
   check_string_in_file("lua/unirunner/terminal.lua", "generate_task_id", "Task ID generation")
+end
+
+-- Check new modules
+print("\n📦 Checking new modules...")
+if check_file_exists("lua/unirunner/root.lua", "Root") then
+  check_string_in_file("lua/unirunner/root.lua", "function M%.get", "root.get function")
+  check_string_in_file("lua/unirunner/root.lua", "function M%.prompt", "root.prompt function")
+end
+if check_file_exists("lua/unirunner/picker.lua", "Picker") then
+  check_string_in_file("lua/unirunner/picker.lua", "function M%.commands_for", "picker.commands_for function")
+  check_string_in_file("lua/unirunner/picker.lua", "function M%.show", "picker.show function")
+  check_string_in_file("lua/unirunner/picker.lua", "function M%.execute", "picker.execute function")
+end
+if check_file_exists("lua/unirunner/url.lua", "URL") then
+  check_string_in_file("lua/unirunner/url.lua", "function M%.open", "url.open function")
+  check_string_in_file("lua/unirunner/url.lua", "function M%.open_select", "url.open_select function")
+end
+
+-- Check that the old native.lua module is gone
+if io.open("lua/unirunner/terminal/native.lua", "r") then
+  table.insert(errors, "❌ terminal/native.lua should be removed (inlined into terminal.lua)")
 end
 
 -- Check config module

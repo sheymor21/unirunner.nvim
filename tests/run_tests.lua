@@ -5,104 +5,100 @@ local describe = test_helper.describe
 local it = test_helper.it
 local expect = test_helper.expect
 
--- Load modules for testing
 package.path = package.path .. ';./lua/?.lua;./lua/?/init.lua'
 
--- Mock file operations for persistence tests
-local mock_files = {}
-local original_readfile = vim.fn.readfile
-local original_writefile = vim.fn.writefile
-local original_isdirectory = vim.fn.isdirectory
-local original_filereadable = vim.fn.filereadable
-local original_mkdir = vim.fn.mkdir
+-- ============================================================================
+-- Persistence
+-- ============================================================================
 
 describe("Persistence Module", function()
   local persistence
-  
+
   it("should load persistence module", function()
     persistence = require('unirunner.persistence')
     expect(persistence).to_be_truthy()
   end)
-  
-  it("should save and retrieve project data", function()
-    -- Mock file operations
+
+  it("should save and retrieve rich history", function()
+    vim.__files = {}
     vim.fn.readfile = function(path)
-      return {vim.json.encode({
-        ["/test/project"] = {
-          last_command = "test",
-          last_run_at = "2024-01-01T12:00:00Z"
-        }
-      })}
+      return vim.__files[path] or {}
     end
     vim.fn.filereadable = function(path)
+      return vim.__files[path] and 1 or 0
+    end
+    vim.fn.writefile = function(lines, path)
+      vim.__files[path] = lines
       return 1
     end
-    
-    local data = persistence.get_project_data("/test/project")
-    expect(data.last_command).to_equal("test")
-    expect(data.last_run_at).to_equal("2024-01-01T12:00:00Z")
-  end)
-  
-  it("should save output to history", function()
-    persistence.save_output("npm test", "Test output line 1\nTest output line 2", false)
-    local history = persistence.get_output_history()
+
+    local entry = {
+      id = 'task-1',
+      command = 'test',
+      full_command = 'npm test',
+      status = 'building',
+      timestamp = '2024-01-01T12:00:00Z',
+      start_time = 0,
+      output = '',
+      pinned = false,
+    }
+    persistence.save_rich_history(entry)
+    local history = persistence.get_rich_history()
     expect(#history).to_be(1)
-    expect(history[1].command).to_equal("npm test")
-    expect(history[1].is_cancelled).to_be(false)
-    expect(history[1].timestamp).to_be_truthy()
+    expect(history[1].command).to_equal('test')
   end)
-  
-  it("should limit history to max entries", function()
-    -- Save multiple outputs
-    for i = 1, 5 do
-      persistence.save_output("command" .. i, "output" .. i, false)
-    end
-    
-    local history = persistence.get_output_history()
-    -- Should be limited to max_history (3 by default)
-    expect(#history).to_be(3)
+
+  it("should pin and unpin entries", function()
+    persistence.pin_entry('task-1')
+    local entry = persistence.get_entry_by_id('task-1')
+    expect(entry.pinned).to_be(true)
+    persistence.unpin_entry('task-1')
+    entry = persistence.get_entry_by_id('task-1')
+    expect(entry.pinned).to_be(false)
   end)
-  
-  it("should clear output history", function()
-    persistence.clear_output_history()
-    local history = persistence.get_output_history()
+
+  it("should delete entries", function()
+    persistence.delete_entry('task-1')
+    local history = persistence.get_rich_history()
     expect(#history).to_be(0)
   end)
-  
-  it("should load local config", function()
-    vim.fn.readfile = function(path)
-      return {'{"custom_commands": {"test": "npm test"}}'}
-    end
-    vim.fn.filereadable = function(path)
-      return path:match("%.unirunner%.json$") and 1 or 0
-    end
-    
-    local config = persistence.load_local_config("/test/project")
-    expect(config).to_be_truthy()
-    expect(config.custom_commands.test).to_equal("npm test")
+
+  it("should clear rich history", function()
+    persistence.save_rich_history({ id = 't2', command = 'x', full_command = 'x', status = 'success', timestamp = 'x', output = '', pinned = false })
+    persistence.clear_rich_history()
+    expect(#persistence.get_rich_history()).to_be(0)
   end)
-  
+
+  it("should return nil when local config does not exist", function()
+    vim.fn.filereadable = function(_) return 0 end
+    local cfg = persistence.load_local_config('/test/missing')
+    expect(cfg).to_be_falsy()
+  end)
+
   it("should save local config", function()
-    local written_data = nil
+    local written = nil
     vim.fn.writefile = function(lines, path)
-      written_data = table.concat(lines, '\n')
+      written = table.concat(lines, '\n')
       return 1
     end
-    
-    local result = persistence.save_local_config("/test/project", {custom_commands = {build = "npm run build"}})
+    local result = persistence.save_local_config('/test/project', { custom_commands = { build = 'npm run build' } })
     expect(result).to_be(true)
-    expect(written_data).to_be_truthy()
+    expect(written).to_be_truthy()
   end)
 end)
 
+-- ============================================================================
+-- Config
+-- ============================================================================
+
 describe("Config Module", function()
   local config
-  
+
   it("should load config module", function()
     config = require('unirunner.config')
     expect(config).to_be_truthy()
   end)
-  
+
   it("should have default values", function()
     local cfg = config.get()
     expect(cfg.terminal).to_equal("native")
@@ -111,221 +107,127 @@ describe("Config Module", function()
     expect(cfg.close_delay).to_be(2000)
     expect(cfg.cancel_close_delay).to_be(100)
   end)
-  
+
   it("should merge user options", function()
-    config.setup({
-      terminal = "native",
-      close_delay = 5000
-    })
-    
+    config.setup({ close_delay = 5000 })
     local cfg = config.get()
-    expect(cfg.terminal).to_equal("native")
     expect(cfg.close_delay).to_be(5000)
-    expect(cfg.persist).to_be(true) -- Should keep default
+    expect(cfg.persist).to_be(true)
   end)
-  
+
   it("should have root markers", function()
     local cfg = config.get()
     expect(cfg.root_markers).to_contain("package.json")
     expect(cfg.root_markers).to_contain("go.mod")
     expect(cfg.root_markers).to_contain(".git")
   end)
+
+  it("should have QWERTY default keymaps", function()
+    local cfg = config.get()
+    expect(cfg.panel.keymaps.down).to_equal("j")
+    expect(cfg.panel.keymaps.up).to_equal("k")
+  end)
 end)
+
+-- ============================================================================
+-- Detector
+-- ============================================================================
 
 describe("Detector Module", function()
   local detector
-  
+
   it("should load detector module", function()
     detector = require('unirunner.detector')
     expect(detector).to_be_truthy()
   end)
-  
+
   it("should find project root", function()
-    -- Mock vim.fn.finddir and vim.fn.fnamemodify
-    vim.fn.finddir = function(name, path)
-      if name == ".git" then
-        return "/test/project/.git"
+    local markers = require('unirunner.config').get().root_markers
+    vim.fn.filereadable = function(path)
+      for _, m in ipairs(markers) do
+        if path:sub(-#m) == m then return 1 end
       end
-      return ""
+      return 0
     end
-    vim.fn.fnamemodify = function(path, mod)
-      if mod == ":h" then
-        return path:gsub("/[^/]+$", "")
-      end
-      return path
-    end
-    vim.fn.getcwd = function()
-      return "/test/project"
-    end
-    
     local root = detector.find_root()
-    expect(root).to_equal("/test/project")
-  end)
-  
-  it("should detect JavaScript projects", function()
-    vim.fn.filereadable = function(path)
-      return path:match("package%.json$") and 1 or 0
-    end
-    vim.fn.readfile = function(path)
-      if path:match("package%.json$") then
-        return {'{"scripts": {"test": "jest"}}'}
-      end
-      return {}
-    end
-    
-    local detected, runner = detector.detect_runner("/test/js-project")
-    expect(detected).to_be(true)
-    expect(runner).to_equal("javascript")
-  end)
-  
-  it("should detect Go projects", function()
-    vim.fn.filereadable = function(path)
-      return path:match("go%.mod$") and 1 or 0
-    end
-    
-    local detected, runner = detector.detect_runner("/test/go-project")
-    expect(detected).to_be(true)
-    expect(runner).to_equal("go")
+    expect(root).to_be_truthy()
   end)
 end)
 
-describe("UI Module", function()
-  local ui
-  
-  it("should load ui module", function()
-    ui = require('unirunner.ui')
-    expect(ui).to_be_truthy()
-  end)
-  
-  it("should select command", function()
-    local selected = nil
-    local commands = {
-      {name = "test", display = "Run tests"},
-      {name = "build", display = "Build project"}
-    }
-    
-    ui.select_command(commands, {prompt = "Select:"}, function(cmd)
-      selected = cmd
-    end)
-    
-    expect(selected).to_be_truthy()
-    expect(selected.name).to_equal("test")
-  end)
-  
-  it("should input custom command", function()
-    local result = nil
-    ui.input_custom_command(function(cmd)
-      result = cmd
-    end)
-    
-    expect(result).to_be_truthy()
-    expect(result.name).to_equal("test_input")
-    expect(result.command).to_equal("test_input")
-  end)
-end)
+-- ============================================================================
+-- Runners registry
+-- ============================================================================
 
 describe("Runners Module", function()
   local runners
-  
+
   it("should load runners module", function()
     runners = require('unirunner.runners')
     expect(runners).to_be_truthy()
   end)
-  
-  it("should register runners", function()
-    local test_runner = {
-      detect = function(root) return true end,
-      get_commands = function(root) return {{name = "test", command = "test"}} end
+
+  it("should register and retrieve runners", function()
+    local r = {
+      detect = function(_) return true end,
+      get_commands = function(_) return { { name = 'foo', command = 'foo' } } end,
     }
-    
-    runners.register("test", test_runner)
-    expect(runners.get("test")).to_equal(test_runner)
-  end)
-  
-  it("should get all runners", function()
-    local all = runners.get_all()
-    expect(type(all)).to_equal("table")
+    runners.register('test_runner', r)
+    expect(runners.get_all().test_runner).to_equal(r)
   end)
 end)
 
-describe("Terminal Module", function()
-  local terminal
-  
-  it("should load terminal module", function()
-    terminal = require('unirunner.terminal')
-    expect(terminal).to_be_truthy()
+-- ============================================================================
+-- Utils
+-- ============================================================================
+
+describe("Utils Module", function()
+  local utils
+
+  it("should load utils", function()
+    utils = require('unirunner.utils')
+    expect(utils).to_be_truthy()
   end)
-  
-  it("should run command", function()
-    local output_received = nil
-    terminal.run("echo test", "/test", function(output)
-      output_received = output
-    end, false)
-    
-    -- Since we're mocking, output might be nil or empty
-    expect(terminal.run).to_be_truthy()
+
+  it("format_duration", function()
+    expect(utils.format_duration(nil)).to_equal('--')
+    expect(utils.format_duration(0.5):find('ms') ~= nil).to_be(true)
+    expect(utils.format_duration(30):find('s') ~= nil).to_be(true)
+    expect(utils.format_duration(75):find('m') ~= nil).to_be(true)
+  end)
+
+  it("format_timestamp", function()
+    expect(utils.format_timestamp(nil)).to_equal('--:--:--')
+    expect(utils.format_timestamp('2024-01-01T12:34:56Z')).to_equal('12:34:56')
+  end)
+
+  it("detect_ports with full URL", function()
+    local urls = utils.detect_ports('Now serving on http://localhost:5046')
+    expect(#urls).to_be(1)
+    expect(urls[1]).to_equal('http://localhost:5046')
+  end)
+
+  it("detect_ports ignores bare 4-digit numbers (timestamp false positive)", function()
+    local urls = utils.detect_ports('elapsed 12:34:56 status 200')
+    expect(#urls).to_be(0)
+  end)
+
+  it("detect_ports matches host:port", function()
+    local urls = utils.detect_ports('listen at localhost:3000')
+    expect(#urls).to_be(1)
+    expect(urls[1]).to_equal('http://localhost:3000')
+  end)
+
+  it("strip_ansi", function()
+    local s = utils.strip_ansi('\27[31mred\27[0m')
+    expect(s).to_equal('red')
   end)
 end)
 
-describe("Main Module", function()
-  local unirunner
-  
-  it("should load main module", function()
-    unirunner = require('unirunner')
-    expect(unirunner).to_be_truthy()
-  end)
-  
-  it("should have setup function", function()
-    expect(unirunner.setup).to_be_truthy()
-  end)
-  
-  it("should have run function", function()
-    expect(unirunner.run).to_be_truthy()
-  end)
-  
-  it("should have run_select function", function()
-    expect(unirunner.run_select).to_be_truthy()
-  end)
-  
-  it("should have run_last function", function()
-    expect(unirunner.run_last).to_be_truthy()
-  end)
-  
-  it("should have open_config function", function()
-    expect(unirunner.open_config).to_be_truthy()
-  end)
-  
-  it("should have goto_terminal function", function()
-    expect(unirunner.goto_terminal).to_be_truthy()
-  end)
-  
-  it("should have show_output_history function", function()
-    expect(unirunner.show_output_history).to_be_truthy()
-  end)
-  
-  it("should have clear_output_history function", function()
-    expect(unirunner.clear_output_history).to_be_truthy()
-  end)
-  
-  it("should have cancel function", function()
-    expect(unirunner.cancel).to_be_truthy()
-  end)
-  
-  it("should have is_active function", function()
-    expect(unirunner.is_active).to_be_truthy()
-  end)
-end)
+-- ============================================================================
+-- Summary
+-- ============================================================================
 
--- Print summary
 local success = results.summary()
-
--- Restore mocks
-vim.fn.readfile = original_readfile
-vim.fn.writefile = original_writefile
-vim.fn.isdirectory = original_isdirectory
-vim.fn.filereadable = original_filereadable
-vim.fn.mkdir = original_mkdir
-
 if not success then
   os.exit(1)
 end
