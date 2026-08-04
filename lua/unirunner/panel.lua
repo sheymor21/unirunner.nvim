@@ -90,7 +90,7 @@ function M.render()
     local status_hl = is_running and (entry.status == 'live' and 'DiagnosticOk' or 'DiagnosticWarn') or status.hl
     
     local line = string.format('%-6s %-20s %10s %12s %8s',
-      pin_icon, entry.command:sub(1, 20),
+      pin_icon, tostring(entry.command or entry.full_command or ''):sub(1, 20),
       utils.format_duration(entry.duration),
       utils.format_timestamp(entry.timestamp),
       status_display)

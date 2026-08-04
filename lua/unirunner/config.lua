@@ -9,6 +9,8 @@ local defaults = {
     'go.mod',
     '*.sln',
     '.git',
+    '.unirunner.json',
+    '.unirunner',
   },
   -- Delay in milliseconds before closing terminal after process finishes (0 to disable)
   close_delay = 2000,

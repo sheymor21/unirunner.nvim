@@ -195,7 +195,7 @@ end
 function M.load_local_config(root)
   local config_file = root .. '/.unirunner.json'
   if vim.fn.filereadable(config_file) == 0 then return nil end
-  
+
   local ok, data = pcall(vim.json.decode, table.concat(vim.fn.readfile(config_file), '\n'))
   if not ok then
     vim.notify('UniRunner: Invalid .unirunner.json', vim.log.levels.ERROR)

@@ -87,8 +87,9 @@ local function render_header(entry)
   
   add_line('┌' .. string.rep('─', box_width) .. '┐', green_hl)
   
+  local cmd_display = tostring(entry.command or entry.full_command or ''):sub(1, 25)
   local header_line = string.format('│ %s %s │ ⏱ %s │ 🕐 %s │ %s │',
-    status_icon, entry.command:sub(1, 25), duration, time_str, status_badge)
+    status_icon, cmd_display, duration, time_str, status_badge)
   
   if #header_line < box_width + 2 then
     header_line = header_line .. string.rep(' ', box_width + 2 - #header_line - 1) .. '│'

@@ -106,8 +106,9 @@ local function render_header()
   
   if #state.detected_ports > 0 then
     -- Build the content part first (without outer borders)
+    local port_display = tostring(state.detected_ports[1] or ''):sub(1, 25)
     local content = string.format('%s %s │ ⏱ %s │ 🕐 %s │ %s',
-      status_icon, state.detected_ports[1]:sub(1, 25), duration, time_str, status_badge)
+      status_icon, port_display, duration, time_str, status_badge)
     
     local content_width = vim.fn.strdisplaywidth(content)
     local available_width = box_width - 2  -- Space between the two │ borders
@@ -139,8 +140,9 @@ local function render_header()
     end
   else
     -- Build the content part first (without outer borders)
+    local cmd_display = tostring(entry.command or entry.full_command or ''):sub(1, 25)
     local content = string.format('%s %s │ ⏱ %s │ 🕐 %s │ %s',
-      status_icon, entry.command:sub(1, 25), duration, time_str, status_badge)
+      status_icon, cmd_display, duration, time_str, status_badge)
     
     local content_width = vim.fn.strdisplaywidth(content)
     local available_width = box_width - 2  -- Space between the two │ borders

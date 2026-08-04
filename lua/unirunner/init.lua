@@ -16,6 +16,107 @@ runners.register('csharp', require('unirunner.runners.csharp'))
 
 local current_root, last_command
 
+-- Find root with fallbacks:
+--   1. .unirunner.json/.unirunner in the current directory
+--   2. walk up from CWD looking for any root marker
+--   3. current buffer directory walk-up
+--   4. cached root (last resort, so a manually selected root persists)
+local function get_root()
+  local cwd = vim.fn.getcwd()
+
+  -- Prefer an explicit config file in the current directory over any cached root
+  if vim.fn.filereadable(cwd .. '/.unirunner.json') == 1
+     or vim.fn.filereadable(cwd .. '/.unirunner') == 1 then
+    current_root = cwd
+    return cwd
+  end
+
+  -- Walk up from CWD looking for any root marker
+  local root = detector.find_root()
+  if root then
+    current_root = root
+    return root
+  end
+
+  -- Fall back to the current buffer's directory
+  local buf_name = vim.api.nvim_buf_get_name(0)
+  if buf_name ~= '' then
+    local buf_dir = vim.fn.fnamemodify(buf_name, ':h')
+    if buf_dir ~= '' and buf_dir ~= '.' then
+      root = detector.find_root(buf_dir)
+      if root then
+        current_root = root
+        return root
+      end
+
+      if vim.fn.filereadable(buf_dir .. '/.unirunner.json') == 1 then
+        current_root = buf_dir
+        return buf_dir
+      end
+    end
+  end
+
+  -- Last resort: reuse a previously cached root
+  if current_root and vim.fn.isdirectory(current_root) == 1 then
+    return current_root
+  end
+
+  return nil
+end
+
+-- Prompt user to select a project root when none is detected
+local function prompt_for_root(callback)
+  local cwd = vim.fn.getcwd()
+  local options = {
+    { label = 'Use current directory (' .. cwd .. ')', value = cwd },
+    { label = 'Custom path...', value = '__custom__' },
+  }
+
+  local display_options = {}
+  for _, opt in ipairs(options) do
+    table.insert(display_options, opt.label)
+  end
+
+  local function safe_continue(value)
+    current_root = value
+    vim.schedule(function()
+      local ok, err = pcall(callback, value)
+      if not ok then
+        vim.notify('UniRunner: ' .. tostring(err), vim.log.levels.ERROR)
+      end
+    end)
+  end
+
+  vim.ui.select(display_options, {
+    prompt = 'No project root found. Select root:',
+  }, function(choice, idx)
+    if not choice or not idx then
+      return
+    end
+
+    local selected = options[idx]
+    if not selected then
+      return
+    end
+
+    if selected.value == '__custom__' then
+      vim.ui.input({ prompt = 'Enter project root path: ' }, function(input_path)
+        if not input_path or input_path == '' then
+          return
+        end
+        local path = vim.fn.fnamemodify(input_path, ':p')
+        if vim.fn.isdirectory(path) == 0 then
+          vim.notify('UniRunner: Invalid directory: ' .. path, vim.log.levels.ERROR)
+          return
+        end
+        safe_continue(path)
+      end)
+    else
+      safe_continue(selected.value)
+    end
+  end)
+end
+
 -- Expose for panel module
 function M.get_all_commands(root)
   local commands = {}
@@ -50,18 +151,28 @@ end
 function M.execute_command(cmd)
   if not cmd then return end
   last_command = cmd
-  
+
   -- Find root if not already set
-  local root = current_root or detector.find_root()
+  local root = get_root()
   if not root then
-    vim.notify('UniRunner: No project root found', vim.log.levels.ERROR)
+    prompt_for_root(function(selected_root)
+      persistence.save_last_command(selected_root, cmd.name)
+      terminal.run(cmd.command, selected_root, function(output)
+        persistence.save_output(cmd.name, output)
+      end, false, cmd.name, { url = cmd.url })
+    end)
     return
   end
-  
-  persistence.save_last_command(root, cmd.name)
-  terminal.run(cmd.command, root, function(output)
-    persistence.save_output(cmd.name, output)
-  end, false, cmd.name, { url = cmd.url })
+
+  local ok, err = pcall(function()
+    persistence.save_last_command(root, cmd.name)
+    terminal.run(cmd.command, root, function(output)
+      persistence.save_output(cmd.name, output)
+    end, false, cmd.name, { url = cmd.url })
+  end)
+  if not ok then
+    vim.notify('UniRunner: ' .. tostring(err), vim.log.levels.ERROR)
+  end
 end
 
 local function show_picker()
@@ -96,73 +207,124 @@ function M.setup(opts)
 end
 
 function M.run()
-  current_root = detector.find_root()
+  current_root = get_root()
   if not current_root then
-    vim.notify('UniRunner: No project root found', vim.log.levels.ERROR)
+    prompt_for_root(function(root)
+      local project_data = persistence.get_project_data(root)
+      if project_data.last_command then
+        for _, cmd in ipairs(M.get_all_commands(root)) do
+          if cmd.name == project_data.last_command then
+            M.execute_command(cmd)
+            return
+          end
+        end
+      end
+      show_picker()
+    end)
     return
   end
-  
-  local project_data = persistence.get_project_data(current_root)
-  if project_data.last_command then
-    for _, cmd in ipairs(M.get_all_commands(current_root)) do
-      if cmd.name == project_data.last_command then
-        M.execute_command(cmd)
-        return
+
+  local ok, err = pcall(function()
+    local project_data = persistence.get_project_data(current_root)
+    if project_data.last_command then
+      for _, cmd in ipairs(M.get_all_commands(current_root)) do
+        if cmd.name == project_data.last_command then
+          M.execute_command(cmd)
+          return
+        end
       end
     end
+    show_picker()
+  end)
+  if not ok then
+    vim.notify('UniRunner: ' .. tostring(err), vim.log.levels.ERROR)
   end
-  
-  show_picker()
 end
 
 function M.run_select()
-  current_root = detector.find_root()
+  current_root = get_root()
   if not current_root then
-    vim.notify('UniRunner: No project root found', vim.log.levels.ERROR)
+    prompt_for_root(function(root)
+      show_picker()
+    end)
     return
   end
-  show_picker()
+  local ok, err = pcall(show_picker)
+  if not ok then
+    vim.notify('UniRunner: ' .. tostring(err), vim.log.levels.ERROR)
+  end
 end
 
 function M.run_last()
-  current_root = detector.find_root()
+  current_root = get_root()
   if not current_root then
-    vim.notify('UniRunner: No project root found', vim.log.levels.ERROR)
+    prompt_for_root(function(root)
+      local project_data = persistence.get_project_data(root)
+      if not project_data.last_command then
+        vim.notify('UniRunner: No last command found', vim.log.levels.WARN)
+        return
+      end
+
+      for _, cmd in ipairs(M.get_all_commands(root)) do
+        if cmd.name == project_data.last_command then
+          M.execute_command(cmd)
+          return
+        end
+      end
+
+      vim.notify('UniRunner: Last command no longer available', vim.log.levels.ERROR)
+    end)
     return
   end
-  
+
   local project_data = persistence.get_project_data(current_root)
   if not project_data.last_command then
     vim.notify('UniRunner: No last command found', vim.log.levels.WARN)
     return
   end
-  
+
   for _, cmd in ipairs(M.get_all_commands(current_root)) do
     if cmd.name == project_data.last_command then
       M.execute_command(cmd)
       return
     end
   end
-  
+
   vim.notify('UniRunner: Last command no longer available', vim.log.levels.ERROR)
 end
 
 function M.open_config()
-  current_root = detector.find_root()
+  current_root = get_root()
   if not current_root then
-    vim.notify('UniRunner: No project root found', vim.log.levels.ERROR)
+    prompt_for_root(function(root)
+      local config_file = root .. '/.unirunner.json'
+      if vim.fn.filereadable(config_file) == 0 then
+        ui.select_config_template(function(config_data)
+          if not config_data then return end
+          persistence.save_local_config(root, config_data)
+          vim.cmd('edit ' .. config_file)
+        end)
+      else
+        vim.cmd('edit ' .. config_file)
+      end
+    end)
     return
   end
-  
-  local config_file = current_root .. '/.unirunner.json'
-  if vim.fn.filereadable(config_file) == 0 then
-    ui.select_config_template(function(config_data)
-      if not config_data then return end
-      persistence.save_local_config(current_root, config_data)
+
+  local ok, err = pcall(function()
+    local config_file = current_root .. '/.unirunner.json'
+    if vim.fn.filereadable(config_file) == 0 then
+      ui.select_config_template(function(config_data)
+        if not config_data then return end
+        persistence.save_local_config(current_root, config_data)
+        vim.cmd('edit ' .. config_file)
+      end)
+    else
       vim.cmd('edit ' .. config_file)
-    end)
-  else
-    vim.cmd('edit ' .. config_file)
+    end
+  end)
+  if not ok then
+    vim.notify('UniRunner: ' .. tostring(err), vim.log.levels.ERROR)
   end
 end
 
@@ -208,7 +370,7 @@ function M.goto_terminal()
 end
 
 function M.is_active()
-  local root = detector.find_root()
+  local root = get_root()
   return root ~= nil and select(2, runners.detect_runner(root)) ~= nil
 end
 
@@ -248,9 +410,16 @@ end
 function M.open_url(opts)
   opts = opts or {}
 
-  local root = current_root or detector.find_root()
+  local root = get_root()
   if not root then
-    vim.notify('UniRunner: No project root found', vim.log.levels.ERROR)
+    prompt_for_root(function(selected_root)
+      vim.schedule(function()
+        local ok, err = pcall(M.open_url, opts)
+        if not ok then
+          vim.notify('UniRunner: ' .. tostring(err), vim.log.levels.ERROR)
+        end
+      end)
+    end)
     return
   end
 
