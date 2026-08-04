@@ -90,7 +90,7 @@ function M.select_config_template(callback)
     end
 
     if category == 'Empty' then
-      callback({ custom_commands = {}, default_command = nil })
+      callback({ custom_commands = vim.empty_dict(), default_command = nil })
       return
     end
 
