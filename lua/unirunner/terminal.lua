@@ -4,9 +4,8 @@ local config = require('unirunner.config')
 local detector = require('unirunner.detector')
 local persistence = require('unirunner.persistence')
 local runner_viewer = require('unirunner.runner_viewer')
-local native = require('unirunner.terminal.native')
 
--- Track running tasks
+-- Single source of truth for active tasks
 local running_tasks = {}
 
 -- Patterns that indicate the server is ready to accept requests
@@ -39,6 +38,10 @@ local function transition_to_live(task_id)
 
   local panel = require('unirunner.panel')
   panel.on_history_update()
+
+  if runner_viewer.is_open() and runner_viewer.get_task_id() == task_id then
+    runner_viewer.refresh()
+  end
 end
 
 local function generate_task_id()
@@ -57,6 +60,7 @@ local function record_task_start(command_name, full_command)
     duration = nil,
     exit_code = nil,
     output = '',
+    output_lines = {},
     pinned = false,
   }
 
@@ -97,6 +101,54 @@ local function record_task_complete(task_id, exit_code, output, is_cancelled)
   runner_viewer.on_task_complete(task_id, status, output)
 end
 
+local function handle_output_line(task_id, line)
+  local entry = running_tasks[task_id]
+  if not entry or not line or line == '' then return end
+
+  table.insert(entry.output_lines, line)
+  runner_viewer.on_task_output(task_id, line)
+
+  if is_server_ready(line) then
+    transition_to_live(task_id)
+  end
+end
+
+local function start_job(task_id, command, cwd, delay)
+  local entry = running_tasks[task_id]
+  if not entry then return end
+
+  local job_id = vim.fn.jobstart(command, {
+    cwd = cwd,
+    on_stdout = function(_, data)
+      if not data then return end
+      for _, line in ipairs(data) do
+        handle_output_line(task_id, line)
+      end
+    end,
+    on_stderr = function(_, data)
+      if not data then return end
+      for _, line in ipairs(data) do
+        handle_output_line(task_id, line)
+      end
+    end,
+    on_exit = function(_, exit_code)
+      local entry = running_tasks[task_id]
+      local output = entry and table.concat(entry.output_lines, '\n') or ''
+      record_task_complete(task_id, exit_code, output, false)
+
+      if delay > 0 then
+        vim.defer_fn(function()
+          if runner_viewer.is_open() and runner_viewer.get_task_id() == task_id then
+            runner_viewer.close()
+          end
+        end, delay)
+      end
+    end,
+  })
+
+  entry.job_id = job_id
+end
+
 -- ============================================================================
 -- PUBLIC API
 -- ============================================================================
@@ -114,7 +166,6 @@ function M.get_running_urls()
   for task_id, entry in pairs(running_tasks) do
     local urls = {}
 
-    -- Get URLs from runner_viewer (includes known_url + detected from output)
     local detected = runner_viewer.get_detected_urls(task_id)
     for _, url in ipairs(detected) do
       if not vim.tbl_contains(urls, url) then
@@ -122,7 +173,6 @@ function M.get_running_urls()
       end
     end
 
-    -- Also check known_url directly as fallback
     if entry.known_url and #urls == 0 then
       for raw_url in entry.known_url:gmatch('([^;]+)') do
         local url = raw_url:match('^%s*(.-)%s*$')
@@ -145,39 +195,36 @@ end
 
 function M.cancel_task(task_id)
   local entry = running_tasks[task_id]
-  if not entry then return false end
+  if not entry or not entry.job_id then return false end
 
-  local cancelled = native.cancel(task_id, entry, record_task_complete)
+  vim.fn.jobstop(entry.job_id)
 
-  if cancelled then
-    -- Wait a bit for any final output to be captured
+  vim.defer_fn(function()
+    local current = running_tasks[task_id]
+    if not current then return end
+    local output = table.concat(current.output_lines, '\n')
+    record_task_complete(task_id, nil, output, true)
+  end, 100)
+
+  local cfg = config.get()
+  if cfg.cancel_close_delay > 0 then
     vim.defer_fn(function()
-      local output = entry.output or ''
-      if entry.output_lines and #entry.output_lines > 0 then
-        output = table.concat(entry.output_lines, '\n')
+      if runner_viewer.is_open() and runner_viewer.get_task_id() == task_id then
+        runner_viewer.close()
       end
-      record_task_complete(task_id, nil, output, true)
-      native.cleanup_task(task_id)
-    end, 100)
-
-    local cfg = config.get()
-    if cfg.cancel_close_delay > 0 then
-      vim.defer_fn(function()
-        if runner_viewer.is_open() and runner_viewer.get_task_id() == task_id then
-          runner_viewer.close()
-        end
-      end, cfg.cancel_close_delay)
-    end
-
-    return true
+    end, cfg.cancel_close_delay)
   end
-  return false
+
+  return true
 end
 
 function M.run(command, root, on_output, is_cancel, command_name, opts)
   opts = opts or {}
 
-  -- Check if any process is already running
+  if on_output then
+    vim.notify('UniRunner: on_output callback is deprecated; output is persisted via record_task_complete', vim.log.levels.WARN)
+  end
+
   local running_count = 0
   for _ in pairs(running_tasks) do
     running_count = running_count + 1
@@ -186,7 +233,6 @@ function M.run(command, root, on_output, is_cancel, command_name, opts)
   if running_count > 0 then
     local cfg = config.get()
     if cfg.kill_on_new_run then
-      -- Cancel all running tasks
       for task_id in pairs(running_tasks) do
         M.cancel_task(task_id)
       end
@@ -202,30 +248,14 @@ function M.run(command, root, on_output, is_cancel, command_name, opts)
 
   local task_id = record_task_start(command_name or command, command)
 
-  -- Store known URL from launchSettings to avoid detecting it from output
-  if running_tasks[task_id] and opts.url then
-    running_tasks[task_id].known_url = opts.url
+  local entry = running_tasks[task_id]
+  if entry and opts.url then
+    entry.known_url = opts.url
   end
 
   runner_viewer.open(task_id, { known_url = opts.url })
 
-  -- Run using native backend
-  local result = native.run({
-    task_id = task_id,
-    command = command,
-    cwd = cwd,
-    on_output = on_output,
-    delay = delay,
-    record_task_complete = record_task_complete,
-    transition_to_live = transition_to_live,
-    is_server_ready = is_server_ready,
-  })
-
-  -- Store backend-specific data in running_tasks
-  if result and running_tasks[task_id] then
-    running_tasks[task_id].job_id = result.job_id
-    running_tasks[task_id].output_lines = result.output_lines
-  end
+  start_job(task_id, command, cwd, delay)
 
   return task_id
 end
