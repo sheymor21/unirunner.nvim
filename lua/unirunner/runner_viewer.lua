@@ -35,17 +35,15 @@ end
 local function setup_keymaps()
   local keymaps = get_keymaps()
   local opts = { buffer = state.buf, silent = true, noremap = true }
-  
+
   local function map(key, fn)
     vim.keymap.set('n', key, fn, opts)
   end
-  
-  -- Navigation
-  map(keymaps.scroll_down or 'n', M.scroll_down)
-  map(keymaps.scroll_up or 'e', M.scroll_up)
-  map('j', M.scroll_down)
-  map('k', M.scroll_up)
-  
+
+  -- Navigation (QWERTY defaults)
+  map(keymaps.scroll_down or 'j', M.scroll_down)
+  map(keymaps.scroll_up or 'k', M.scroll_up)
+
   -- Control
   map(keymaps.follow or 'r', M.resume_following)
   map(keymaps.cancel or 'c', M.cancel_process)
@@ -53,7 +51,7 @@ local function setup_keymaps()
   map('q', M.close)
   map('gg', M.goto_top)
   map('G', M.goto_bottom)
-  
+
   -- Search
   map('/', function()
     M.pause_following()

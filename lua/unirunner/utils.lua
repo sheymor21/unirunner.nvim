@@ -297,9 +297,10 @@ function M.detect_ports(text)
     end
   end
   
-  -- Fallback: Match patterns like localhost:3000, 127.0.0.1:8080
+  -- Fallback: Match host:port patterns like localhost:3000 or 127.0.0.1:8080.
+  -- Requires an explicit host separator so we don't pick up timestamps (12:34:56) or HTTP status codes.
   if #ports == 0 then
-    for host, port in text:gmatch('(%w[%w%.]*):(%d%d%d%d+)') do
+    for host, port in text:gmatch('([%w][%w%.%-_]*):(%d%d%d%d+)') do
       local url = 'http://' .. host .. ':' .. port
       if not vim.tbl_contains(ports, url) then
         table.insert(ports, url)
@@ -307,14 +308,6 @@ function M.detect_ports(text)
     end
   end
 
-  -- Also catch bare ports like ":8080" and treat as localhost
-  for port in text:gmatch('[^%w%.](%d%d%d%d+)') do
-    local url = 'http://localhost:' .. port
-    if not vim.tbl_contains(ports, url) then
-      table.insert(ports, url)
-    end
-  end
-  
   return ports
 end
 

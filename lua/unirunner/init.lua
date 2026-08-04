@@ -157,18 +157,14 @@ function M.execute_command(cmd)
   if not root then
     prompt_for_root(function(selected_root)
       persistence.save_last_command(selected_root, cmd.name)
-      terminal.run(cmd.command, selected_root, function(output)
-        persistence.save_output(cmd.name, output)
-      end, false, cmd.name, { url = cmd.url })
+      terminal.run(cmd.command, selected_root, nil, false, cmd.name, { url = cmd.url })
     end)
     return
   end
 
   local ok, err = pcall(function()
     persistence.save_last_command(root, cmd.name)
-    terminal.run(cmd.command, root, function(output)
-      persistence.save_output(cmd.name, output)
-    end, false, cmd.name, { url = cmd.url })
+    terminal.run(cmd.command, root, nil, false, cmd.name, { url = cmd.url })
   end)
   if not ok then
     vim.notify('UniRunner: ' .. tostring(err), vim.log.levels.ERROR)
@@ -385,8 +381,10 @@ local function combine_url(base, path)
   if path:match('^https?://') then
     return path
   end
-  base = base:gsub('/$', '')
-  path = path:gsub('^/', '')
+  -- Strip all trailing slashes from base
+  base = base:gsub('/+$', '')
+  -- Strip leading slashes from path
+  path = path:gsub('^/+', '')
   return base .. '/' .. path
 end
 
@@ -563,18 +561,12 @@ function M.cancel()
   
   local function close_terminal(win)
     local buf = vim.api.nvim_win_get_buf(win)
-    if last_command then
-      local ok, lines = pcall(vim.api.nvim_buf_get_lines, buf, 0, -1, false)
-      if ok then
-        persistence.save_output(last_command.name, table.concat(lines, '\n'), true)
-      end
-    end
-    
+
     local ok, chan = pcall(vim.api.nvim_buf_get_var, buf, 'terminal_job_id')
     if ok and chan then
       vim.api.nvim_chan_send(chan, '\x03')
     end
-    
+
     if cancel_delay > 0 then
       vim.defer_fn(function()
         if vim.api.nvim_win_is_valid(win) then
