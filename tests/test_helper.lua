@@ -239,6 +239,8 @@ vim_mock.fn = {
     return expr
   end,
 
+  strdisplaywidth = function(s) return #s end,
+
   shellescape = function(s) return "'" .. s .. "'" end,
 
   has = function(_) return 0 end,
@@ -304,6 +306,7 @@ vim_mock.api = {
   nvim_win_set_option = function(_, _, _) return true end,
   nvim_win_set_height = function(_, _) return true end,
   nvim_win_set_width = function(_, _) return true end,
+  nvim_win_get_width = function(_) return 80 end,
   nvim_win_set_cursor = function(_, _) return true end,
   nvim_win_get_cursor = function(_) return { 1, 0 } end,
   nvim_win_get_buf = function(_) return 1 end,

@@ -224,6 +224,122 @@ describe("Utils Module", function()
 end)
 
 -- ============================================================================
+-- Runner Viewer — output_lines suppression while running
+-- ============================================================================
+
+describe("Runner Viewer Module", function()
+  it("duration timer does not leak output_lines into the buffer while running", function()
+    package.loaded['unirunner.runner_viewer'] = nil
+    package.loaded['unirunner.persistence'] = nil
+    package.loaded['unirunner.terminal'] = nil
+
+    local persistence = require('unirunner.persistence')
+
+    local fake_entry = {
+      id = 'timer-task',
+      command = 'dev',
+      full_command = 'npm run dev',
+      status = 'building',
+      timestamp = '2024-01-01T12:00:00Z',
+      start_time = os.clock(),
+      duration = nil,
+      output = '',
+      output_lines = {},
+      pinned = false,
+    }
+    persistence.get_entry_by_id = function(_) return fake_entry end
+    persistence.get_rich_history = function() return { fake_entry } end
+
+    local runner_viewer = require('unirunner.runner_viewer')
+
+    local captured_timer_cb = nil
+    local original_timer_start = vim.fn.timer_start
+    vim.fn.timer_start = function(_, callback, _)
+      captured_timer_cb = callback
+      return 99
+    end
+
+    local last_buf_write = nil
+    local original_set_lines = vim.api.nvim_buf_set_lines
+    vim.api.nvim_buf_set_lines = function(_, _, _, _, lines)
+      last_buf_write = lines
+      return lines
+    end
+
+    runner_viewer.open('timer-task')
+    runner_viewer.on_task_output('timer-task', 'procedural log line 1')
+    runner_viewer.on_task_output('timer-task', 'procedural log line 2')
+    last_buf_write = nil
+
+    captured_timer_cb()
+
+    vim.fn.timer_start = original_timer_start
+    vim.api.nvim_buf_set_lines = original_set_lines
+
+    expect(last_buf_write).to_be_truthy()
+    expect(#last_buf_write).to_be(3)
+    for _, line in ipairs(last_buf_write) do
+      if line == 'procedural log line 1' or line == 'procedural log line 2' then
+        error('Output line leaked into buffer while task is running: ' .. tostring(line))
+      end
+    end
+
+    runner_viewer.close()
+  end)
+
+  it("on_task_complete renders header + output when task finishes", function()
+    package.loaded['unirunner.runner_viewer'] = nil
+    package.loaded['unirunner.persistence'] = nil
+    package.loaded['unirunner.terminal'] = nil
+
+    local persistence = require('unirunner.persistence')
+
+    local fake_entry = {
+      id = 'finish-task',
+      command = 'dev',
+      full_command = 'npm run dev',
+      status = 'building',
+      timestamp = '2024-01-01T12:00:00Z',
+      start_time = os.clock(),
+      duration = nil,
+      output = '',
+      output_lines = {},
+      pinned = false,
+    }
+    persistence.get_entry_by_id = function(_) return fake_entry end
+    persistence.get_rich_history = function() return { fake_entry } end
+
+    local runner_viewer = require('unirunner.runner_viewer')
+
+    local last_buf_write = nil
+    local original_set_lines = vim.api.nvim_buf_set_lines
+    vim.api.nvim_buf_set_lines = function(_, _, _, _, lines)
+      last_buf_write = lines
+      return lines
+    end
+
+    runner_viewer.open('finish-task')
+
+    local complete_output = 'final log line one\nfinal log line two'
+    runner_viewer.on_task_complete('finish-task', 'success', complete_output)
+
+    vim.api.nvim_buf_set_lines = original_set_lines
+
+    expect(last_buf_write).to_be_truthy()
+    local saw_final = false
+    for _, line in ipairs(last_buf_write) do
+      if line:find('final log line') then
+        saw_final = true
+        break
+      end
+    end
+    expect(saw_final).to_be(true)
+
+    runner_viewer.close()
+  end)
+end)
+
+-- ============================================================================
 -- Summary
 -- ============================================================================
 
