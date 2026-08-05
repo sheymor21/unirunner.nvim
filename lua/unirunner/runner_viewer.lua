@@ -190,15 +190,10 @@ local function start_duration_timer()
       M.stop_duration_timer()
       return
     end
-    -- Only re-render the header (line 1) instead of the whole buffer
     if state.buf and vim.api.nvim_buf_is_valid(state.buf) then
       local lines, highlights = render_header()
       vim.api.nvim_buf_set_option(state.buf, 'modifiable', true)
-      -- Re-render header plus output. Cheap because we only re-append known state.
-      local all = {}
-      for _, l in ipairs(lines) do table.insert(all, l) end
-      for _, l in ipairs(state.output_lines) do table.insert(all, l) end
-      vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, all)
+      vim.api.nvim_buf_set_lines(state.buf, 0, -1, false, lines)
       vim.api.nvim_buf_set_option(state.buf, 'modifiable', false)
       apply_highlights(highlights)
     end
